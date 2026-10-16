@@ -1059,8 +1059,8 @@ const COVERS = {
   slate: { bg: "#4A5560", fg: "#E0D9C8", sub: "#A39B85", accent: "#F1C36B" }
 };
 const SHELF_AUTHORS = {
-  me: { id: "me", name: "我", cssVar: "--reader-me", deepVar: "--reader-me-deep" },
-  non: { id: "non", name: "同伴", cssVar: "--reader-other", deepVar: "--reader-other-deep", solid: "#C2683F" }
+  me: { id: "me", name: "Chai", cssVar: "--reader-me", deepVar: "--reader-me-deep" },
+  non: { id: "non", name: "Non", cssVar: "--reader-other", deepVar: "--reader-other-deep", solid: "#C2683F" }
 };
 const DEMO_STORAGE = "nest_bookshelf_demo_library_v1";
 const DEMO_PARAGRAPHS = [
@@ -1080,7 +1080,14 @@ const DEMO_PARAGRAPHS = [
 ];
 function demoBook(id, title, cover, status, index) {
   const paras = [...DEMO_PARAGRAPHS];
-  const annotations = index === 0 ? [{ id: "demo-note-1", author: "me", chapter: 1, page: 1, paraIdx: 3, rangeStart: 0, rangeEnd: 15, color: "yellow", text: paras[3].slice(0, 15), note: "给阅读留一点自己的节奏。", date: todayShelf(), createdAt: 1, comments: [] }] : [];
+  const quote = "有些句子不必急着读完。停一下，把此刻的想法留在页边。";
+  const annotations = index === 0 ? [
+    { id: "demo-note-1", author: "me", chapter: 1, page: 1, paraIdx: 2, rangeStart: 0, rangeEnd: quote.length, color: "yellow", text: quote, note: "你读到这里，会想到什么？", date: todayShelf(), createdAt: 2, comments: [
+      { author: "non", date: todayShelf(), time: "20:16", text: "我想到：慢一点，才会看见句子里的自己。" },
+      { author: "me", date: todayShelf(), time: "20:17", text: "那我们就从这一页慢慢聊。" }
+    ] },
+    { id: "demo-note-ai", author: "non", chapter: 1, page: 1, paraIdx: 3, rangeStart: 0, rangeEnd: 12, color: "blue", text: paras[3].slice(0, 12), note: "给阅读留白，也给想法留一点位置。", date: todayShelf(), createdAt: 1, comments: [] }
+  ] : [];
   return { id, title, author: "NEST 示例文集", description: "用于界面演示的原创示例文字。", cover, status, progress: status === "finished" ? 1 : 0.18 + index * 0.09, currentPage: status === "finished" ? 12 : 2 + index, totalPages: 12, addedAt: todayShelf(), lastReadAt: todayShelf(), _lastReadMs: 100 - index, finishedAt: status === "finished" ? todayShelf() : null, toc: paras.map((p, i) => /^第.+章/.test(p) ? { title: p, page: 1, paraIdx: i } : null).filter(Boolean), annotations, text: [{ chapter: 1, page: 1, paragraphs: paras }] };
 }
 const DEFAULT_BOOKS = [
@@ -3674,7 +3681,7 @@ function AnnotationSheet({ mode, existing, selectedText, onSave, onAddComment, o
           setReply("");
         }
       },
-      placeholder: `回复 ${author.name}…`,
+      placeholder: "写下回复…",
       style: {
         flex: 1,
         minWidth: 0,
