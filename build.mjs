@@ -1,0 +1,10 @@
+import fs from 'node:fs/promises';
+import { transform } from 'esbuild';
+const source = await fs.readFile(new URL('./bookshelf.jsx', import.meta.url), 'utf8');
+const { code } = await transform(source, {loader:'jsx',charset:'utf8',legalComments:'none'});
+const target = new URL('./index.html', import.meta.url);
+const html = await fs.readFile(target, 'utf8');
+const marker = /(<script id="bookshelf-app">)[\s\S]*?(<\/script>)/;
+if (!marker.test(html)) throw new Error('Missing bookshelf-app build marker');
+await fs.writeFile(target, html.replace(marker, (_,open,close)=>open+code.replace(/<\/script/gi,'<\\/script')+close));
+console.log('Updated index.html');
