@@ -2042,6 +2042,7 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
   const [showJumpPage, setShowJumpPage] = React.useState(false);
   const [selUI, setSelUI] = React.useState(null);
   const PAGE_GAP = 64;
+  const READER_TOP_INSET = "calc(12px + env(safe-area-inset-top, 0px))";
   const pagerRef = React.useRef(null);
   const colRef = React.useRef(null);
   const [prefs, setPrefs] = React.useState(() => {
@@ -2490,6 +2491,15 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
       </div>
 
       
+      {isScroll && <div className="reader-top-soften" aria-hidden="true" style={{
+        position:'absolute', top:0, left:0, right:0, height:READER_TOP_INSET,
+        zIndex:11, pointerEvents:'none',
+        background:'color-mix(in srgb, var(--bg) 60%, transparent)',
+        backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)',
+        maskImage:'linear-gradient(to bottom, #000 0%, #000 35%, transparent 100%)',
+        WebkitMaskImage:'linear-gradient(to bottom, #000 0%, #000 35%, transparent 100%)',
+      }} />}
+
       <div
     ref={pagerRef}
     className="reader-viewport"
@@ -2505,7 +2515,8 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
     onTouchCancel={cancelTouchTurn}
     style={{
       position: "absolute",
-      top: "calc(12px + env(safe-area-inset-top, 0px))",
+      top: isScroll ? 0 : READER_TOP_INSET,
+      paddingTop: isScroll ? READER_TOP_INSET : 0,
       bottom: 0,
       left: 0,
       right: 0,
