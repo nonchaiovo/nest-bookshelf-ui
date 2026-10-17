@@ -21,9 +21,14 @@ const COVERS = {
   bone: { bg: "#D4C9B0", fg: "#3A2D20", sub: "#8A7559", accent: "#4A3C2A" },
   slate: { bg: "#4A5560", fg: "#E0D9C8", sub: "#A39B85", accent: "#F1C36B" }
 };
+// 填写使用者自己和 AI 的名字与头像；留空时显示通用占位，不附带作者的个人资料。
+const SHELF_PROFILES = {
+  me: { name: "", avatar: "" },
+  ai: { name: "", avatar: "" }
+};
 const SHELF_AUTHORS = {
-  me: { id: "me", name: "Chai", cssVar: "--reader-me", deepVar: "--reader-me-deep" },
-  non: { id: "non", name: "Non", cssVar: "--reader-other", deepVar: "--reader-other-deep", solid: "#C2683F" }
+  me: { id: "me", name: SHELF_PROFILES.me.name.trim() || "我", cssVar: "--reader-me", deepVar: "--reader-me-deep" },
+  ai: { id: "ai", name: SHELF_PROFILES.ai.name.trim() || "AI", cssVar: "--reader-other", deepVar: "--reader-other-deep", solid: "#C2683F" }
 };
 const DEMO_STORAGE = "nest_bookshelf_demo_library_v1";
 const DEMO_PARAGRAPHS = [
@@ -46,10 +51,10 @@ function demoBook(id, title, cover, status, index) {
   const quote = "有些句子不必急着读完。停一下，把此刻的想法留在页边。";
   const annotations = index === 0 ? [
     {id:"demo-note-1",author:"me",chapter:1,page:1,paraIdx:2,rangeStart:0,rangeEnd:quote.length,color:"yellow",text:quote,note:"你读到这里，会想到什么？",date:todayShelf(),createdAt:2,comments:[
-      {author:"non",date:todayShelf(),time:"20:16",text:"我想到：慢一点，才会看见句子里的自己。"},
+      {author:"ai",date:todayShelf(),time:"20:16",text:"我想到：慢一点，才会看见句子里的自己。"},
       {author:"me",date:todayShelf(),time:"20:17",text:"那我们就从这一页慢慢聊。"}
     ]},
-    {id:"demo-note-ai",author:"non",chapter:1,page:1,paraIdx:3,rangeStart:0,rangeEnd:12,color:"blue",text:paras[3].slice(0,12),note:"给阅读留白，也给想法留一点位置。",date:todayShelf(),createdAt:1,comments:[]}
+    {id:"demo-note-ai",author:"ai",chapter:1,page:1,paraIdx:3,rangeStart:0,rangeEnd:12,color:"blue",text:paras[3].slice(0,12),note:"给阅读留白，也给想法留一点位置。",date:todayShelf(),createdAt:1,comments:[]}
   ] : [];
   return { id, title, author: "NEST 示例文集", description: "用于界面演示的原创示例文字。", cover, status, progress: status === "finished" ? 1 : 0.18 + index * 0.09, currentPage: status === "finished" ? 12 : 2 + index, totalPages: 12, addedAt: todayShelf(), lastReadAt: todayShelf(), _lastReadMs: 100 - index, finishedAt: status === "finished" ? todayShelf() : null, toc: paras.map((p, i) => /^第.+章/.test(p) ? { title: p, page: 1, paraIdx: i } : null).filter(Boolean), annotations, text: [{ chapter: 1, page: 1, paragraphs: paras }] };
 }
@@ -64,7 +69,15 @@ const DEFAULT_BOOKS = [
 function loadDemoBooks() {
   try {
     const saved = JSON.parse(localStorage.getItem(DEMO_STORAGE));
-    if (Array.isArray(saved) && saved.every((b) => b && typeof b.id === "string" && typeof b.title === "string" && Array.isArray(b.annotations) && Array.isArray(b.text))) return saved;
+    if (Array.isArray(saved) && saved.every((b) => b && typeof b.id === "string" && typeof b.title === "string" && Array.isArray(b.annotations) && Array.isArray(b.text))) {
+      // 旧演示的共读角色键统一为 ai，保留已保存的书籍、批注和回复。
+      const role = (author) => !author || author === "me" ? "me" : "ai";
+      return saved.map((book) => ({ ...book, annotations: book.annotations.map((annotation) => ({
+        ...annotation,
+        author: role(annotation.author),
+        comments: (annotation.comments || []).map((comment) => ({ ...comment, author: role(comment.author) }))
+      })) }));
+    }
   } catch {
   }
   return JSON.parse(JSON.stringify(DEFAULT_BOOKS));
@@ -1571,7 +1584,7 @@ function UploadSheet({ onClose, onAdded }) {
     </>;
 }
 function readShelfIdentity(author) {
-  return { name: SHELF_AUTHORS[author]?.name || "读者", src: "" };
+  return { name: SHELF_AUTHORS[author]?.name || "读者", src: SHELF_PROFILES[author]?.avatar.trim() || "" };
 }
 function useShelfIdentity(author) {
   return readShelfIdentity(author);
@@ -1707,7 +1720,7 @@ function profileActivity(author) {
 }
 function ProfileView({ onOpenBook, onOpenAnnotation, isShelfActive = true }) {
   const me = useShelfIdentity("me");
-  const partner = useShelfIdentity("non");
+  const partner = useShelfIdentity("ai");
   const [person, setPerson] = React.useState(null);
   const [section, setSection] = React.useState("notes");
   const panelRef = React.useRef(null);
@@ -1720,7 +1733,7 @@ function ProfileView({ onOpenBook, onOpenAnnotation, isShelfActive = true }) {
     else document.documentElement.dataset.theme = t;
     setTheme(t);
   };
-  const activities = { me: profileActivity("me"), non: profileActivity("non") };
+  const activities = { me: profileActivity("me"), ai: profileActivity("ai") };
   const ownBooks = [...BOOKS].sort((a, b) => (b._lastReadMs || 0) - (a._lastReadMs || 0) || (b.lastReadAt || b.addedAt || "").localeCompare(a.lastReadAt || a.addedAt || ""));
   const booksFor = (author) => author === "me" ? ownBooks : [...new Map(activities[author].map((row) => [row.book.id, row.book])).values()];
   const closePerson = () => {
@@ -1804,11 +1817,11 @@ function ProfileView({ onOpenBook, onOpenAnnotation, isShelfActive = true }) {
       .person-empty { padding:40px 12px; text-align:center; color:var(--text2); font-size:12px; }
       .reader-profiles button:focus-visible,.person-reading-panel button:focus-visible { outline:2px solid var(--reader-other-deep); outline-offset:3px; }
     `}</style>
-    {["me", "non"].map((author) => {
+    {["me", "ai"].map((author) => {
     const who = author === "me" ? me : partner, activity = activities[author];
     const notes = activity.filter((row) => row.kind !== "回复").length, replies = activity.length - notes;
     const recent = author === "me" ? ownBooks.find((book) => book.status === "reading") : booksFor(author)[0];
-    return <button key={author} className={`reader-profile-card ${author === "non" ? "partner" : ""}`} aria-label={`查看${who.name}的阅读`} onClick={(e) => openPerson(author, e)}>
+    return <button key={author} className={`reader-profile-card ${author === "ai" ? "partner" : ""}`} aria-label={`查看${who.name}的阅读`} onClick={(e) => openPerson(author, e)}>
         <div className="reader-profile-head"><Avatar author={author} size={56} /><div><div className="reader-profile-name">{who.name}</div><div className="reader-profile-stats"><span>{notes} 条批注与高亮</span><span>{replies} 条回复</span></div></div></div>
         <div className="reader-profile-latest"><div className="reader-profile-cover">{recent && <BookCover book={recent} w={38} h={55} />}</div><div><div className="reader-profile-latest-label">{author === "me" ? "正在读" : "最近共读"}</div><div className="reader-profile-latest-title">{recent?.title || (author === "me" ? "暂无在读书籍" : "暂无共读记录")}</div>{recent && <div className="reader-profile-meta">{author === "me" ? `已读 ${Math.round((recent.progress || 0) * 100)}%` : recent.author}</div>}</div></div>
       </button>;
@@ -1818,7 +1831,7 @@ function ProfileView({ onOpenBook, onOpenAnnotation, isShelfActive = true }) {
     {person && ReactDOM.createPortal(<section ref={panelRef} className="person-reading-panel" style={{ display: isShelfActive ? void 0 : "none" }} role="dialog" aria-modal="true" aria-label={`${identity.name}的阅读`} onKeyDown={panelKeys}>
       <ShelfTopBar title={`${identity.name}的阅读`} left={<button aria-label="返回个人页" onClick={closePerson} style={navBtn}><IconChevronL /></button>} />
       <header className="person-reading-head">
-        <div className="person-reading-identity">{person === "me" ? <ReaderAvatarSlot /> : <Avatar author="non" size={58} />}<div><div className="reader-profile-name">{identity.name}</div><div className="reader-profile-meta">{rows.length} 条批注与回复 · {selectedBooks.length} 本{person === "non" ? "共读书籍" : "书籍"}</div></div></div>
+        <div className="person-reading-identity">{person === "me" ? <ReaderAvatarSlot /> : <Avatar author="ai" size={58} />}<div><div className="reader-profile-name">{identity.name}</div><div className="reader-profile-meta">{rows.length} 条批注与回复 · {selectedBooks.length} 本{person === "ai" ? "共读书籍" : "书籍"}</div></div></div>
         <SlidingSegments className="person-reading-tabs" aria-label="阅读记录类型">{[["notes", "批注与回复"], ["books", person === "me" ? "书籍" : "共读书籍"]].map(([key, label]) => <button key={key} aria-pressed={section === key} onClick={() => {
     returnFocusRef.current = null;
     setSection(key);
@@ -1902,7 +1915,7 @@ function ReaderParagraph({ text, paraIdx, annotations, editing, onTapAnnotation,
   >
       {pieces.map((p, i) => {
     if (p.kind === "plain") return <React.Fragment key={i}>{p.text}</React.Fragment>;
-    const authorVar = p.ann.author === "non" ? "--reader-other-deep" : "--reader-me-deep";
+    const authorVar = p.ann.author === "ai" ? "--reader-other-deep" : "--reader-me-deep";
     return <span
       key={i}
       data-ann-id={p.ann.id}
