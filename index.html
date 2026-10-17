@@ -174,31 +174,39 @@ button:has(.book-cover):active,.tappable:has(.book-cover):active,[data-nest-segm
   const style = document.createElement('style'); style.id='nest-segment-motion-style'; style.textContent=css; document.head.append(style);
   function mount(group) {
     if (!group || mounted.has(group)) return mounted.get(group);
-    let frame=0, destroyed=false;
+    let frame=0, destroyed=false, lastActive=null, interactionTarget=null;
     const update = () => {
       frame=0;
       if (destroyed) return;
       const buttons=[...group.children].filter(el=>el.tagName==='BUTTON');
       const active=buttons.find(el=>el.getAttribute('aria-pressed')==='true' || el.getAttribute('aria-selected')==='true' || el.getAttribute('aria-current')==='page' || el.classList.contains('active'));
-      if (!active || !group.offsetWidth || !active.offsetWidth || active.hidden) { group.removeAttribute('data-slide-ready');group.removeAttribute('data-slide-animate');return; }
+      if (!active || !group.offsetWidth || !active.offsetWidth || active.hidden) { lastActive=null;interactionTarget=null;group.removeAttribute('data-slide-ready');group.removeAttribute('data-slide-animate');return; }
       const underline=group.dataset.nestSegment==='underline';
       const values={'--slide-x':active.offsetLeft+'px','--slide-y':(underline ? group.clientHeight-2 : active.offsetTop)+'px','--slide-w':active.offsetWidth+'px','--slide-h':(underline ? 2 : active.offsetHeight)+'px','--slide-radius':underline ? '1px' : getComputedStyle(active).borderRadius};
       if (group.dataset.nestSegment==='discipline') values['--slide-fill']=getComputedStyle(active).getPropertyValue('--active-bg').trim() || 'rgba(120,90,50,.75)';
+      const ready=group.hasAttribute('data-slide-ready');
+      const changed=Object.entries(values).some(([key,value])=>group.style.getPropertyValue(key)!==value);
+      // A resize/count refresh can follow a click; an unchanged measurement must not cancel its animation.
+      if (ready && !changed) { lastActive=active;interactionTarget=null;return; }
+      const animate=ready && lastActive && active!==lastActive && active===interactionTarget;
+      group.toggleAttribute('data-slide-animate',!!animate);
       for (const [key,value] of Object.entries(values)) if (group.style.getPropertyValue(key)!==value) group.style.setProperty(key,value);
-      if (!group.hasAttribute('data-slide-ready')) {
-        group.setAttribute('data-slide-ready','');
-        // Commit the starting position once so the first user change can interpolate.
-        getComputedStyle(group,'::before').transform;
-        group.setAttribute('data-slide-animate','');
-      }
+      group.setAttribute('data-slide-ready','');
+      lastActive=active;interactionTarget=null;
     };
     const schedule=()=>{if(!frame&&!destroyed) frame=requestAnimationFrame(update);};
+    // Click also covers keyboard activation. Layout, visibility and data updates are not user switches.
+    const onClick=e=>{
+      const button=e.target.closest?.('button');
+      if(button?.parentElement===group && !button.disabled) { interactionTarget=button;schedule(); }
+    };
+    group.addEventListener('click',onClick,true);
     const observer=new MutationObserver(records=>{
       if(records.some(r=>r.type==='childList' || r.target!==group)) schedule();
     });
-    observer.observe(group,{subtree:true,childList:true,attributes:true,attributeFilter:['class','aria-pressed','aria-selected','aria-current','hidden','style']});
+    observer.observe(group,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['class','aria-pressed','aria-selected','aria-current','hidden','style']});
     const resize=new ResizeObserver(schedule); resize.observe(group);
-    const api={update:schedule,destroy(){destroyed=true;cancelAnimationFrame(frame);observer.disconnect();resize.disconnect();mounted.delete(group);group.removeAttribute('data-slide-ready');group.removeAttribute('data-slide-animate');}};
+    const api={update:schedule,destroy(){destroyed=true;cancelAnimationFrame(frame);observer.disconnect();resize.disconnect();group.removeEventListener('click',onClick,true);mounted.delete(group);group.removeAttribute('data-slide-ready');group.removeAttribute('data-slide-animate');}};
     mounted.set(group,api);update();return api;
   }
   function scan(root=document){root.querySelectorAll('[data-nest-segment]').forEach(mount);}
@@ -1279,14 +1287,70 @@ function IconPlus() {
   return /* @__PURE__ */ React.createElement("svg", { width: "18", height: "18", viewBox: "0 0 18 18" }, /* @__PURE__ */ React.createElement("path", { d: "M9 3v12M3 9h12", stroke: sv("--text"), strokeWidth: "1.8", strokeLinecap: "round" }));
 }
 const shelfHeaderStyle = { padding: "58px 16px 8px", display: "flex", alignItems: "center", flexShrink: 0 };
-function ShelfTopBar({ title, left, right, sideWidth = 40 }) {
+function ShelfSoftEdge({ edge = "top", size = 56, style }) {
+  const direction = edge === "top" ? "to bottom" : "to top";
+  const layer = { position: "absolute", inset: 0, pointerEvents: "none" };
+  return /* @__PURE__ */ React.createElement("div", { className: "shelf-soft-edge", "data-edge": edge, "aria-hidden": "true", style: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    [edge]: 0,
+    height: size,
+    pointerEvents: "none",
+    overflow: "hidden",
+    ...style
+  } }, [{ blur: 3, end: 100 }, { blur: 10, end: 65 }].map(({ blur, end }) => {
+    const mask = `linear-gradient(${direction}, #000 0%, #000 12%, transparent ${end}%)`;
+    return /* @__PURE__ */ React.createElement("span", { key: blur, style: { ...layer, backdropFilter: `blur(${blur}px)`, WebkitBackdropFilter: `blur(${blur}px)`, maskImage: mask, WebkitMaskImage: mask } });
+  }), /* @__PURE__ */ React.createElement("span", { style: { ...layer, background: `linear-gradient(${direction}, var(--bg) 0%, color-mix(in srgb, var(--bg) 96%, transparent) 16%, color-mix(in srgb, var(--bg) 72%, transparent) 40%, color-mix(in srgb, var(--bg) 26%, transparent) 72%, transparent 100%)` } }));
+}
+function useShelfScrollPosition(scrollRef, enabled = true) {
+  React.useLayoutEffect(() => {
+    const scroller = scrollRef.current, scope = scroller?.parentElement;
+    if (!scroller || !scope) return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const top = enabled ? Math.max(0, scroller.scrollTop) : 0;
+      const bottom = enabled ? Math.max(0, scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop) : 0;
+      scope.style.setProperty("--soft-top", String(Math.min(1, top / 32)));
+      scope.style.setProperty("--soft-bottom", String(Math.min(1, bottom / 32)));
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    scroller.addEventListener("scroll", schedule, { passive: true });
+    const resize = new ResizeObserver(schedule);
+    resize.observe(scroller);
+    if (scroller.firstElementChild) resize.observe(scroller.firstElementChild);
+    const content = new MutationObserver(schedule);
+    content.observe(scroller, { childList: true, subtree: true, characterData: true });
+    update();
+    return () => {
+      cancelAnimationFrame(frame);
+      scroller.removeEventListener("scroll", schedule);
+      resize.disconnect();
+      content.disconnect();
+    };
+  }, [scrollRef, enabled]);
+}
+function ShelfScrollEdges({ scrollRef, enabled = true, topSize = 56, bottomSize = 48, style }) {
+  useShelfScrollPosition(scrollRef, enabled);
+  if (!enabled) return null;
+  return /* @__PURE__ */ React.createElement("div", { className: "shelf-scroll-edges", "aria-hidden": "true", style: { position: "absolute", inset: 0, pointerEvents: "none", zIndex: 5, ...style } }, /* @__PURE__ */ React.createElement(ShelfSoftEdge, { size: topSize, style: { opacity: "var(--soft-top,0)" } }), /* @__PURE__ */ React.createElement(ShelfSoftEdge, { edge: "bottom", size: bottomSize, style: { opacity: "var(--soft-bottom,0)" } }));
+}
+function ShelfScrollArea({ children, scrollRef: externalRef, style, ...props }) {
+  const ownRef = React.useRef(null), scrollRef = externalRef || ownRef;
+  return /* @__PURE__ */ React.createElement("div", { className: "shelf-scroll-area", style: { position: "relative", display: "flex", flexDirection: "column", flex: 1, minHeight: 0 } }, /* @__PURE__ */ React.createElement("div", { ...props, ref: scrollRef, style: { flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", ...style } }, children), /* @__PURE__ */ React.createElement(ShelfScrollEdges, { scrollRef }));
+}
+function ShelfTopBar({ title, left, right, sideWidth = 40, softEdge = false }) {
   return /* @__PURE__ */ React.createElement("div", { className: "shelf-topbar", style: {
     ...shelfHeaderStyle,
     position: "sticky",
     top: 0,
     zIndex: 10,
     background: sv("--bg")
-  } }, /* @__PURE__ */ React.createElement("div", { style: { width: sideWidth, height: 40, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "flex-start" } }, left), /* @__PURE__ */ React.createElement("div", { style: {
+  } }, softEdge && /* @__PURE__ */ React.createElement(ShelfSoftEdge, { size: 44, style: { top: "100%", opacity: "var(--soft-top,0)" } }), /* @__PURE__ */ React.createElement("div", { style: { width: sideWidth, height: 40, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "flex-start" } }, left), /* @__PURE__ */ React.createElement("div", { style: {
     flex: 1,
     minWidth: 0,
     textAlign: "center",
@@ -1501,9 +1565,7 @@ function ShelfView({ onOpenBook, onResume, onUpload, isShelfActive = true }) {
       .shelf-library-filters .shelf-status button { padding:7px 11px; }
       .shelf-library-filters .shelf-status button[aria-pressed=true] { background:var(--bg2); box-shadow:none; }
       .shelf-library-count { color:var(--text3); font-size:10px; white-space:nowrap; }
-      .shelf-library-content { position:relative; flex:1; min-height:0; }
-      .shelf-library-content::after { content:''; position:absolute; inset:0 0 auto; height:28px; z-index:1; pointer-events:none; opacity:var(--library-edge-opacity,0); background:color-mix(in srgb,var(--bg) 60%,transparent); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); mask-image:linear-gradient(to bottom,#000 0%,#000 15%,transparent 100%); -webkit-mask-image:linear-gradient(to bottom,#000 0%,#000 15%,transparent 100%); }
-      .shelf-library-scroll { height:100%; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+      .shelf-library-scroll { overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
       .shelf-library-list { display:flex; flex-direction:column; gap:12px; padding:4px 20px calc(28px + env(safe-area-inset-bottom, 0px)); max-width:620px; margin:0 auto; }
       .library-book-row { display:flex; align-items:center; gap:19px; width:100%; padding:19px 18px; border:0; border-radius:18px; background:var(--card); color:var(--text); text-align:left; cursor:pointer; }
       .library-book-row:active { background:var(--card); }
@@ -1523,10 +1585,10 @@ function ShelfView({ onOpenBook, onResume, onUpload, isShelfActive = true }) {
   } }, label, /* @__PURE__ */ React.createElement("small", null, count))))), /* @__PURE__ */ React.createElement("div", { className: "shelf-row-heading" }, /* @__PURE__ */ React.createElement("span", null, tab === "reading" ? "其它在读" : "已读完"), /* @__PURE__ */ React.createElement("button", { className: "shelf-all", onClick: (e) => openLibrary(e) }, "查看全部")), recent.length ? /* @__PURE__ */ React.createElement("div", { className: "shelf-carousel", ref: trackRef, "aria-label": tab === "reading" ? "其它在读书籍" : "已读完书籍" }, recent.map((book, index) => /* @__PURE__ */ React.createElement(BookGridCard, { key: book.id, book, index, onOpen: () => onOpenBook(book.id) }))) : /* @__PURE__ */ React.createElement("div", { className: "shelf-empty" }, !BOOKS.length ? /* @__PURE__ */ React.createElement(React.Fragment, null, "书架还是空的", /* @__PURE__ */ React.createElement("button", { className: "shelf-resume", onClick: onUpload }, "导入书籍")) : tab === "finished" ? "暂无已读完的书" : hero ? "暂无其它在读书籍" : "暂无在读书籍"), libraryOpen && ReactDOM.createPortal(/* @__PURE__ */ React.createElement("section", { className: "shelf-library", style: { display: isShelfActive ? void 0 : "none" }, ref: panelRef, role: "dialog", "aria-modal": "true", "aria-label": "全部书籍", onKeyDown: panelKeys }, /* @__PURE__ */ React.createElement(ShelfTopBar, { title: "全部书籍", right: /* @__PURE__ */ React.createElement("button", { className: "shelf-close", style: navBtn, "aria-label": "返回书架", onClick: closeLibrary }, /* @__PURE__ */ React.createElement(IconClose, null)) }), /* @__PURE__ */ React.createElement("header", { className: "shelf-library-head" }, /* @__PURE__ */ React.createElement("div", { className: "shelf-library-search" }, /* @__PURE__ */ React.createElement(IconSearch, null), /* @__PURE__ */ React.createElement("input", { ref: searchRef, placeholder: "书名或作者", "aria-label": "搜索书名或作者", value: query, onChange: (e) => setQuery(e.target.value) }), query && /* @__PURE__ */ React.createElement("button", { "aria-label": "清空搜索", onClick: () => {
     setQuery("");
     searchRef.current?.focus();
-  } }, /* @__PURE__ */ React.createElement(IconClose, null))), /* @__PURE__ */ React.createElement("div", { className: "shelf-library-filters" }, /* @__PURE__ */ React.createElement(SlidingSegments, { className: "shelf-status", style: { "--slide-fill": "var(--bg2)" } }, [["all", "全部"], ["reading", "在读"], ["finished", "读完"]].map(([key, label]) => /* @__PURE__ */ React.createElement("button", { key, "aria-pressed": libraryTab === key, onClick: () => setLibraryTab(key) }, label))), /* @__PURE__ */ React.createElement("span", { className: "shelf-library-count" }, collection.length, " 本"))), /* @__PURE__ */ React.createElement("div", { className: "shelf-library-content" }, /* @__PURE__ */ React.createElement("div", { className: "shelf-library-scroll", onScroll: (e) => e.currentTarget.parentElement.style.setProperty("--library-edge-opacity", String(Math.min(1, Math.max(0, e.currentTarget.scrollTop) / 24))) }, /* @__PURE__ */ React.createElement("div", { className: "shelf-library-list" }, collection.map((book) => /* @__PURE__ */ React.createElement(LibraryBookRow, { key: book.id, book, onOpen: () => {
+  } }, /* @__PURE__ */ React.createElement(IconClose, null))), /* @__PURE__ */ React.createElement("div", { className: "shelf-library-filters" }, /* @__PURE__ */ React.createElement(SlidingSegments, { className: "shelf-status", style: { "--slide-fill": "var(--bg2)" } }, [["all", "全部"], ["reading", "在读"], ["finished", "读完"]].map(([key, label]) => /* @__PURE__ */ React.createElement("button", { key, "aria-pressed": libraryTab === key, onClick: () => setLibraryTab(key) }, label))), /* @__PURE__ */ React.createElement("span", { className: "shelf-library-count" }, collection.length, " 本"))), /* @__PURE__ */ React.createElement(ShelfScrollArea, { className: "shelf-library-scroll" }, /* @__PURE__ */ React.createElement("div", { className: "shelf-library-list" }, collection.map((book) => /* @__PURE__ */ React.createElement(LibraryBookRow, { key: book.id, book, onOpen: () => {
     libraryFocusRef.current = document.activeElement;
     onOpenBook(book.id);
-  } }))), !collection.length && /* @__PURE__ */ React.createElement("div", { className: "shelf-empty" }, needle ? "未找到匹配的书籍" : "暂无书籍")))), document.body));
+  } }))), !collection.length && /* @__PURE__ */ React.createElement("div", { className: "shelf-empty" }, needle ? "未找到匹配的书籍" : "暂无书籍"))), document.body));
 }
 function BookDetailView({ bookId, onClose, onResume, onJumpAnnotation, onSetStatus, onDelete, initialTab }) {
   const book = bookById(bookId);
@@ -1693,7 +1755,7 @@ function BookDetailView({ bookId, onClose, onResume, onJumpAnnotation, onSetStat
     letterSpacing: 0.5,
     boxShadow: "0 6px 20px rgba(0,0,0,0.25)",
     animation: "fadeIn 200ms ease"
-  } }, toast), /* @__PURE__ */ React.createElement("div", { "data-book-detail-scroll": true, style: { flex: 1, overflow: "auto", overflowAnchor: "none" } }, /* @__PURE__ */ React.createElement("div", { style: {
+  } }, toast), /* @__PURE__ */ React.createElement(ShelfScrollArea, { "data-book-detail-scroll": true, style: { flex: 1, overflow: "auto", overflowAnchor: "none" } }, /* @__PURE__ */ React.createElement("div", { style: {
     padding: "12px 24px 24px",
     display: "flex",
     flexDirection: "column",
@@ -2577,7 +2639,7 @@ function ProfileView({ onOpenBook, onOpenAnnotation, isShelfActive = true }) {
   }), /* @__PURE__ */ React.createElement("div", { className: "reader-profile-theme-label" }, "外观"), /* @__PURE__ */ React.createElement(SlidingSegments, { className: "reader-profile-theme", "aria-label": "外观" }, [["system", "跟随系统"], ["light", "浅色"], ["dark", "深色"]].map(([key, label]) => /* @__PURE__ */ React.createElement("button", { key, "aria-pressed": theme === key, onClick: () => applyTheme(key) }, label))), person && ReactDOM.createPortal(/* @__PURE__ */ React.createElement("section", { ref: panelRef, className: "person-reading-panel", style: { display: isShelfActive ? void 0 : "none" }, role: "dialog", "aria-modal": "true", "aria-label": `${identity.name}的阅读`, onKeyDown: panelKeys }, /* @__PURE__ */ React.createElement(ShelfTopBar, { title: `${identity.name}的阅读`, left: /* @__PURE__ */ React.createElement("button", { "aria-label": "返回个人页", onClick: closePerson, style: navBtn }, /* @__PURE__ */ React.createElement(IconChevronL, null)) }), /* @__PURE__ */ React.createElement("header", { className: "person-reading-head" }, /* @__PURE__ */ React.createElement("div", { className: "person-reading-identity" }, person === "me" ? /* @__PURE__ */ React.createElement(ReaderAvatarSlot, null) : /* @__PURE__ */ React.createElement(Avatar, { author: "ai", size: 58 }), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "reader-profile-name" }, identity.name), /* @__PURE__ */ React.createElement("div", { className: "reader-profile-meta" }, rows.length, " 条批注与回复 · ", selectedBooks.length, " 本", person === "ai" ? "共读书籍" : "书籍"))), /* @__PURE__ */ React.createElement(SlidingSegments, { className: "person-reading-tabs", "aria-label": "阅读记录类型" }, [["notes", "批注与回复"], ["books", person === "me" ? "书籍" : "共读书籍"]].map(([key, label]) => /* @__PURE__ */ React.createElement("button", { key, "aria-pressed": section === key, onClick: () => {
     returnFocusRef.current = null;
     setSection(key);
-  } }, label)))), /* @__PURE__ */ React.createElement("div", { className: "person-reading-scroll" }, /* @__PURE__ */ React.createElement("div", { className: "person-reading-content" }, section === "notes" ? rows.length ? rows.map((row) => /* @__PURE__ */ React.createElement("button", { key: row.key, className: "person-note", "data-kind": row.kind, "aria-label": `查看${identity.name}在${row.book.title}中的${row.kind}`, onClick: () => {
+  } }, label)))), /* @__PURE__ */ React.createElement(ShelfScrollArea, { className: "person-reading-scroll" }, /* @__PURE__ */ React.createElement("div", { className: "person-reading-content" }, section === "notes" ? rows.length ? rows.map((row) => /* @__PURE__ */ React.createElement("button", { key: row.key, className: "person-note", "data-kind": row.kind, "aria-label": `查看${identity.name}在${row.book.title}中的${row.kind}`, onClick: () => {
     rememberFocus();
     onOpenAnnotation(row.book.id, row.annotation);
   } }, /* @__PURE__ */ React.createElement("div", { className: "person-note-meta" }, /* @__PURE__ */ React.createElement("span", { className: "person-note-kind" }, row.kind), /* @__PURE__ */ React.createElement("span", null, [row.date, row.time].filter(Boolean).join(" · "))), /* @__PURE__ */ React.createElement("div", { className: "person-note-text" }, row.text), /* @__PURE__ */ React.createElement("div", { className: "person-note-book" }, /* @__PURE__ */ React.createElement(BookCover, { book: row.book, w: 22, h: 32 }), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "person-note-book-title" }, row.book.title), /* @__PURE__ */ React.createElement("div", { className: "person-note-book-author" }, row.book.author))))) : /* @__PURE__ */ React.createElement("div", { className: "person-empty" }, "暂无批注与回复") : selectedBooks.length ? selectedBooks.map((book) => /* @__PURE__ */ React.createElement("button", { key: book.id, className: "person-book", onClick: () => {
@@ -3211,9 +3273,8 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
     transition: "transform 250ms cubic-bezier(0.2,0,0.2,1), opacity 200ms",
     transform: showChrome ? "translateY(0)" : "translateY(-100%)",
     opacity: showChrome ? 1 : 0,
-    pointerEvents: showChrome ? "auto" : "none",
-    borderBottom: "0.5px solid " + sv("--line")
-  } }, /* @__PURE__ */ React.createElement(
+    pointerEvents: showChrome ? "auto" : "none"
+  } }, /* @__PURE__ */ React.createElement(ShelfSoftEdge, { size: 48, style: { top: "100%" } }), /* @__PURE__ */ React.createElement(
     ShelfTopBar,
     {
       sideWidth: 82,
@@ -3221,20 +3282,7 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
       left: /* @__PURE__ */ React.createElement("button", { onClick: onClose, "aria-label": "返回", style: navBtn }, /* @__PURE__ */ React.createElement(IconChevronL, null)),
       right: /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 2 } }, /* @__PURE__ */ React.createElement("button", { onClick: () => setShowSettings(true), "aria-label": "阅读设置", style: { ...navBtn, fontFamily: SHELF_SERIF, fontSize: 17 } }, "Aa"), /* @__PURE__ */ React.createElement("button", { onClick: () => setShowToc(true), "aria-label": "目录", style: navBtn }, /* @__PURE__ */ React.createElement("svg", { width: "18", height: "18", viewBox: "0 0 18 18" }, /* @__PURE__ */ React.createElement("path", { d: "M3 4h12M3 9h12M3 14h12", stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round" }))))
     }
-  )), isScroll && /* @__PURE__ */ React.createElement("div", { className: "reader-top-soften", "aria-hidden": "true", style: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: READER_TOP_INSET,
-    zIndex: 11,
-    pointerEvents: "none",
-    background: "color-mix(in srgb, var(--bg) 60%, transparent)",
-    backdropFilter: "blur(8px)",
-    WebkitBackdropFilter: "blur(8px)",
-    maskImage: "linear-gradient(to bottom, #000 0%, #000 35%, transparent 100%)",
-    WebkitMaskImage: "linear-gradient(to bottom, #000 0%, #000 35%, transparent 100%)"
-  } }), /* @__PURE__ */ React.createElement(
+  )), /* @__PURE__ */ React.createElement(
     "div",
     {
       ref: pagerRef,
@@ -3325,6 +3373,15 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
       cursor: "pointer"
     } })),
     "      "
+  ), /* @__PURE__ */ React.createElement(
+    ShelfScrollEdges,
+    {
+      scrollRef: pagerRef,
+      enabled: isScroll,
+      topSize: READER_TOP_INSET,
+      bottomSize: "calc(28px + env(safe-area-inset-bottom, 0px))",
+      style: { zIndex: 11 }
+    }
   ), showSettings && /* @__PURE__ */ React.createElement(
     ReaderSettings,
     {
@@ -3590,7 +3647,7 @@ function AnnotationSheet({ mode, existing, selectedText, onSave, onAddComment, o
     background: sv("--text3"),
     opacity: 0.4,
     margin: "0 auto 8px"
-  } }), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, overflow: "auto", padding: "8px 20px 0" } }, /* @__PURE__ */ React.createElement("div", { style: {
+  } }), /* @__PURE__ */ React.createElement(ShelfScrollArea, { style: { flex: 1, overflow: "auto", padding: "8px 20px 0" } }, /* @__PURE__ */ React.createElement("div", { style: {
     padding: "12px 14px",
     borderRadius: 12,
     background: sv("--card"),
@@ -3937,7 +3994,7 @@ function TocDrawer({ book, currentChapterIndex = -1, onClose, onJumpPara }) {
     fontWeight: 700,
     color: sv("--text"),
     lineHeight: 1.3
-  } }, book.title)), /* @__PURE__ */ React.createElement("div", { ref: listRef, className: "reader-toc-list", style: { flex: 1, minHeight: 0, overflow: "auto" } }, toc.map((c, i) => {
+  } }, book.title)), /* @__PURE__ */ React.createElement(ShelfScrollArea, { scrollRef: listRef, className: "reader-toc-list", style: { flex: 1, minHeight: 0, overflow: "auto" } }, toc.map((c, i) => {
     const isCurrent = i === currentChapterIndex;
     return /* @__PURE__ */ React.createElement(
       "button",
@@ -4027,6 +4084,8 @@ function ShelfApp() {
     setRoute({ view: "shelf" });
   };
   const [tab, setTab] = React.useState("books");
+  const mainScrollRef = React.useRef(null);
+  useShelfScrollPosition(mainScrollRef);
   const closeToHost = () => {
     setTab("books");
     backToShelf();
@@ -4043,7 +4102,7 @@ function ShelfApp() {
     height: "100%",
     background: sv("--bg"),
     overflow: "hidden"
-  } }, /* @__PURE__ */ React.createElement("div", { style: {
+  } }, /* @__PURE__ */ React.createElement("div", { ref: mainScrollRef, className: "shelf-main-scroll", style: {
     height: "100%",
     overflow: "auto",
     overflowX: "hidden",
@@ -4052,6 +4111,7 @@ function ShelfApp() {
   } }, /* @__PURE__ */ React.createElement(
     ShelfTopBar,
     {
+      softEdge: true,
       title: head.title,
       left: /* @__PURE__ */ React.createElement("button", { style: navBtn, "aria-label": "返回", onClick: closeToHost }, /* @__PURE__ */ React.createElement(IconChevronL, null)),
       right: head.right
@@ -4090,7 +4150,7 @@ function ShelfBottomTabBar({ active, onTab }) {
     { k: "books", icon: (color) => /* @__PURE__ */ React.createElement("svg", { width: "20", height: "20", viewBox: "0 0 20 20" }, /* @__PURE__ */ React.createElement("path", { d: "M3 3.5C3 3.5 5 3 7.5 3.5C9 4 10 5 10 5V17C10 17 9 16 7.5 15.5C5.5 15 3 15.5 3 15.5V3.5Z", stroke: color, strokeWidth: "1.5", fill: "none", strokeLinejoin: "round" }), /* @__PURE__ */ React.createElement("path", { d: "M17 3.5C17 3.5 15 3 12.5 3.5C11 4 10 5 10 5V17C10 17 11 16 12.5 15.5C14.5 15 17 15.5 17 15.5V3.5Z", stroke: color, strokeWidth: "1.5", fill: "none", strokeLinejoin: "round" })) },
     { k: "me", icon: (color) => /* @__PURE__ */ React.createElement("svg", { width: "20", height: "20", viewBox: "0 0 20 20" }, /* @__PURE__ */ React.createElement("circle", { cx: "10", cy: "7", r: "3.2", stroke: color, strokeWidth: "1.6", fill: "none" }), /* @__PURE__ */ React.createElement("path", { d: "M3.5 17c.7-3.4 3.4-5 6.5-5s5.8 1.6 6.5 5", stroke: color, strokeWidth: "1.6", fill: "none", strokeLinecap: "round" })) }
   ];
-  return /* @__PURE__ */ React.createElement("div", { style: {
+  return /* @__PURE__ */ React.createElement("div", { className: "shelf-bottom-bar", style: {
     position: "absolute",
     bottom: 0,
     left: 0,
@@ -4101,13 +4161,15 @@ function ShelfBottomTabBar({ active, onTab }) {
     // 跟日记保持一致：纯 28px，不再叠 env(safe-area-inset-bottom)
     // （之前叠了 → home indicator 高度 ~34px 全空在底栏下方，比日记浮高一截）
     paddingBottom: 28,
-    background: "linear-gradient(180deg, transparent 0%, " + sv("--bg") + " 28%)",
+    background: "transparent",
     zIndex: 30
-  } }, /* @__PURE__ */ React.createElement("div", { style: {
+  } }, /* @__PURE__ */ React.createElement(ShelfSoftEdge, { edge: "bottom", size: "calc(100% + 44px)" }), /* @__PURE__ */ React.createElement("div", { className: "shelf-tab-items", style: {
+    position: "relative",
+    zIndex: 1,
     display: "flex",
     alignItems: "center",
     justifyContent: "space-around",
-    background: sv("--bg")
+    background: "transparent"
   } }, tabs.map((t) => {
     const isActive = active === t.k;
     return /* @__PURE__ */ React.createElement("button", { key: t.k, "aria-label": t.k === "books" ? "书架" : t.k === "marks" ? "书签" : "我", "aria-current": isActive ? "page" : void 0, onClick: () => onTab(t.k), style: {

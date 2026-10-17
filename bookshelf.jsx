@@ -249,28 +249,76 @@ function IconPlus() {
     </svg>;
 }
 const shelfHeaderStyle = { padding: "58px 16px 8px", display: "flex", alignItems: "center", flexShrink: 0 };
-function ShelfTopBar({ title, left, right, sideWidth = 40 }) {
-  return <div className="shelf-topbar" style={{
-    ...shelfHeaderStyle,
-    position: "sticky",
-    top: 0,
-    zIndex: 10,
-    background: sv("--bg")
+// Full-width soft scroll edges: progressive blur with an opaque endpoint, never a visible clipping seam.
+function ShelfSoftEdge({ edge = 'top', size = 56, style }) {
+  const direction = edge === 'top' ? 'to bottom' : 'to top';
+  const layer = {position:'absolute', inset:0, pointerEvents:'none'};
+  return <div className="shelf-soft-edge" data-edge={edge} aria-hidden="true" style={{
+    position:'absolute', left:0, right:0, [edge]:0, height:size, pointerEvents:'none', overflow:'hidden', ...style,
   }}>
-      <div style={{ width: sideWidth, height: 40, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "flex-start" }}>{left}</div>
-      <div style={{
-    flex: 1,
-    minWidth: 0,
-    textAlign: "center",
-    fontFamily: SHELF_SANS,
-    fontSize: 16,
-    fontWeight: 600,
-    color: sv("--text"),
-    letterSpacing: 0.3
-  }}>{title}</div>
-      <div style={{ width: sideWidth, height: 40, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "flex-end" }}>{right}</div>
-    </div>;
+    {[{blur:3,end:100},{blur:10,end:65}].map(({blur,end}) => {
+      const mask=`linear-gradient(${direction}, #000 0%, #000 12%, transparent ${end}%)`;
+      return <span key={blur} style={{...layer, backdropFilter:`blur(${blur}px)`, WebkitBackdropFilter:`blur(${blur}px)`, maskImage:mask, WebkitMaskImage:mask}} />;
+    })}
+    <span style={{...layer, background:`linear-gradient(${direction}, var(--bg) 0%, color-mix(in srgb, var(--bg) 96%, transparent) 16%, color-mix(in srgb, var(--bg) 72%, transparent) 40%, color-mix(in srgb, var(--bg) 26%, transparent) 72%, transparent 100%)`}} />
+  </div>;
 }
+function useShelfScrollPosition(scrollRef, enabled = true) {
+  React.useLayoutEffect(() => {
+    const scroller=scrollRef.current, scope=scroller?.parentElement;
+    if (!scroller || !scope) return;
+    let frame=0;
+    const update=()=>{
+      frame=0;
+      const top=enabled ? Math.max(0,scroller.scrollTop) : 0;
+      const bottom=enabled ? Math.max(0,scroller.scrollHeight-scroller.clientHeight-scroller.scrollTop) : 0;
+      scope.style.setProperty('--soft-top',String(Math.min(1,top/32)));
+      scope.style.setProperty('--soft-bottom',String(Math.min(1,bottom/32)));
+    };
+    const schedule=()=>{if(!frame)frame=requestAnimationFrame(update);};
+    scroller.addEventListener('scroll',schedule,{passive:true});
+    const resize=new ResizeObserver(schedule);resize.observe(scroller);
+    if(scroller.firstElementChild)resize.observe(scroller.firstElementChild);
+    const content=new MutationObserver(schedule);content.observe(scroller,{childList:true,subtree:true,characterData:true});
+    update();
+    return ()=>{cancelAnimationFrame(frame);scroller.removeEventListener('scroll',schedule);resize.disconnect();content.disconnect();};
+  }, [scrollRef,enabled]);
+}
+function ShelfScrollEdges({ scrollRef, enabled = true, topSize = 56, bottomSize = 48, style }) {
+  useShelfScrollPosition(scrollRef,enabled);
+  if(!enabled)return null;
+  return <div className="shelf-scroll-edges" aria-hidden="true" style={{position:'absolute',inset:0,pointerEvents:'none',zIndex:5,...style}}>
+    <ShelfSoftEdge size={topSize} style={{opacity:'var(--soft-top,0)'}} />
+    <ShelfSoftEdge edge="bottom" size={bottomSize} style={{opacity:'var(--soft-bottom,0)'}} />
+  </div>;
+}
+function ShelfScrollArea({ children, scrollRef: externalRef, style, ...props }) {
+  const ownRef=React.useRef(null), scrollRef=externalRef || ownRef;
+  return <div className="shelf-scroll-area" style={{position:'relative',display:'flex',flexDirection:'column',flex:1,minHeight:0}}>
+    <div {...props} ref={scrollRef} style={{flex:1,minHeight:0,overflowY:'auto',overscrollBehavior:'contain',...style}}>{children}</div>
+    <ShelfScrollEdges scrollRef={scrollRef}/>
+  </div>;
+}
+
+function ShelfTopBar({ title, left, right, sideWidth = 40, softEdge = false }) {
+  return (
+    <div className="shelf-topbar" style={{
+      ...shelfHeaderStyle,
+      position: 'sticky', top: 0, zIndex: 10,
+      background: sv('--bg'),
+    }}>
+      {softEdge && <ShelfSoftEdge size={44} style={{top:'100%',opacity:'var(--soft-top,0)'}}/>}
+      <div style={{ width: sideWidth, height:40, flexShrink:0, display: 'flex', alignItems:'center', justifyContent: 'flex-start' }}>{left}</div>
+      <div style={{
+        flex: 1, minWidth:0, textAlign: 'center',
+        fontFamily: SHELF_SANS, fontSize: 16, fontWeight: 600, color: sv('--text'), letterSpacing: 0.3,
+      }}>{title}</div>
+      <div style={{ width: sideWidth, height:40, flexShrink:0, display: 'flex', alignItems:'center', justifyContent: 'flex-end' }}>{right}</div>
+    </div>
+  );
+}
+
+
 function BookCover({ book, w = 124, h = 178, showSpine = true }) {
   const palette = COVERS[book.cover] || COVERS.ink;
   const edge = Math.max(0.7, w * 0.018);
@@ -521,9 +569,7 @@ function ShelfView({ onOpenBook, onResume, onUpload, isShelfActive = true }) {
       .shelf-library-filters .shelf-status button { padding:7px 11px; }
       .shelf-library-filters .shelf-status button[aria-pressed=true] { background:var(--bg2); box-shadow:none; }
       .shelf-library-count { color:var(--text3); font-size:10px; white-space:nowrap; }
-      .shelf-library-content { position:relative; flex:1; min-height:0; }
-      .shelf-library-content::after { content:''; position:absolute; inset:0 0 auto; height:28px; z-index:1; pointer-events:none; opacity:var(--library-edge-opacity,0); background:color-mix(in srgb,var(--bg) 60%,transparent); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); mask-image:linear-gradient(to bottom,#000 0%,#000 15%,transparent 100%); -webkit-mask-image:linear-gradient(to bottom,#000 0%,#000 15%,transparent 100%); }
-      .shelf-library-scroll { height:100%; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+      .shelf-library-scroll { overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
       .shelf-library-list { display:flex; flex-direction:column; gap:12px; padding:4px 20px calc(28px + env(safe-area-inset-bottom, 0px)); max-width:620px; margin:0 auto; }
       .library-book-row { display:flex; align-items:center; gap:19px; width:100%; padding:19px 18px; border:0; border-radius:18px; background:var(--card); color:var(--text); text-align:left; cursor:pointer; }
       .library-book-row:active { background:var(--card); }
@@ -556,11 +602,11 @@ function ShelfView({ onOpenBook, onResume, onUpload, isShelfActive = true }) {
   }}><IconClose /></button>}</div>
         <div className="shelf-library-filters"><SlidingSegments className="shelf-status" style={{ "--slide-fill": "var(--bg2)" }}>{[["all", "全部"], ["reading", "在读"], ["finished", "读完"]].map(([key, label]) => <button key={key} aria-pressed={libraryTab === key} onClick={() => setLibraryTab(key)}>{label}</button>)}</SlidingSegments><span className="shelf-library-count">{collection.length} 本</span></div>
       </header>
-      <div className="shelf-library-content"><div className="shelf-library-scroll" onScroll={e => e.currentTarget.parentElement.style.setProperty('--library-edge-opacity', String(Math.min(1, Math.max(0, e.currentTarget.scrollTop) / 24)))}><div className="shelf-library-list">{collection.map((book) => <LibraryBookRow key={book.id} book={book} onOpen={() => {
+      <ShelfScrollArea className="shelf-library-scroll"><div className="shelf-library-list">{collection.map((book) => <LibraryBookRow key={book.id} book={book} onOpen={() => {
     libraryFocusRef.current = document.activeElement;
     onOpenBook(book.id);
-  }} />)}</div>{!collection.length && <div className="shelf-empty">{needle ? "未找到匹配的书籍" : "暂无书籍"}</div>}</div>
-    </div></section>, document.body)}
+  }} />)}</div>{!collection.length && <div className="shelf-empty">{needle ? "未找到匹配的书籍" : "暂无书籍"}</div>}</ShelfScrollArea>
+    </section>, document.body)}
   </main>;
 }
 function BookDetailView({ bookId, onClose, onResume, onJumpAnnotation, onSetStatus, onDelete, initialTab }) {
@@ -758,7 +804,7 @@ function BookDetailView({ bookId, onClose, onResume, onJumpAnnotation, onSetStat
     animation: "fadeIn 200ms ease"
   }}>{toast}</div>}
 
-      <div data-book-detail-scroll style={{ flex: 1, overflow: "auto", overflowAnchor: "none" }}>
+      <ShelfScrollArea data-book-detail-scroll style={{ flex: 1, overflow: "auto", overflowAnchor: "none" }}>
         
         <div style={{
     padding: "12px 24px 24px",
@@ -944,7 +990,7 @@ function BookDetailView({ bookId, onClose, onResume, onJumpAnnotation, onSetStat
           </div>}
         
         {false}
-      </div>
+      </ShelfScrollArea>
     </div>;
 }
 function Stat2({ label, value }) {
@@ -1839,7 +1885,7 @@ function ProfileView({ onOpenBook, onOpenAnnotation, isShelfActive = true }) {
     setSection(key);
   }}>{label}</button>)}</SlidingSegments>
       </header>
-      <div className="person-reading-scroll"><div className="person-reading-content">
+      <ShelfScrollArea className="person-reading-scroll"><div className="person-reading-content">
         {section === "notes" ? rows.length ? rows.map((row) => <button key={row.key} className="person-note" data-kind={row.kind} aria-label={`查看${identity.name}在${row.book.title}中的${row.kind}`} onClick={() => {
     rememberFocus();
     onOpenAnnotation(row.book.id, row.annotation);
@@ -1847,7 +1893,7 @@ function ProfileView({ onOpenBook, onOpenAnnotation, isShelfActive = true }) {
     rememberFocus();
     onOpenBook(book.id);
   }}><BookCover book={book} w={58} h={85} /><div><div className="reader-profile-latest-title">{book.title}</div><div className="reader-profile-meta">{book.author}</div><div className="reader-profile-meta">{person === "me" ? book.status === "finished" ? "已读完" : `在读 · ${Math.round((book.progress || 0) * 100)}%` : `${rows.filter((row) => row.book.id === book.id).length} 条批注与回复`}</div></div></button>) : <div className="person-empty">暂无共读书籍</div>}
-      </div></div>
+      </div></ShelfScrollArea>
     </section>, document.body)}
   </div>;
 }
@@ -2479,8 +2525,8 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
     transform: showChrome ? "translateY(0)" : "translateY(-100%)",
     opacity: showChrome ? 1 : 0,
     pointerEvents: showChrome ? "auto" : "none",
-    borderBottom: "0.5px solid " + sv("--line")
   }}>
+        <ShelfSoftEdge size={48} style={{top:'100%'}}/>
         <ShelfTopBar
     sideWidth={82}
     title={<>
@@ -2499,15 +2545,6 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
       </div>
 
       
-      {isScroll && <div className="reader-top-soften" aria-hidden="true" style={{
-        position:'absolute', top:0, left:0, right:0, height:READER_TOP_INSET,
-        zIndex:11, pointerEvents:'none',
-        background:'color-mix(in srgb, var(--bg) 60%, transparent)',
-        backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)',
-        maskImage:'linear-gradient(to bottom, #000 0%, #000 35%, transparent 100%)',
-        WebkitMaskImage:'linear-gradient(to bottom, #000 0%, #000 35%, transparent 100%)',
-      }} />}
-
       <div
     ref={pagerRef}
     className="reader-viewport"
@@ -2596,6 +2633,9 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
     width: 18,
     cursor: "pointer"
   }} /></>}      </div>
+
+      <ShelfScrollEdges scrollRef={pagerRef} enabled={isScroll} topSize={READER_TOP_INSET}
+        bottomSize="calc(28px + env(safe-area-inset-bottom, 0px))" style={{zIndex:11}}/>
 
       {showSettings && <ReaderSettings
     prefs={prefs}
@@ -2861,7 +2901,7 @@ function AnnotationSheet({ mode, existing, selectedText, onSave, onAddComment, o
   }} />
 
         
-        <div style={{ flex: 1, overflow: "auto", padding: "8px 20px 0" }}>
+        <ShelfScrollArea style={{ flex: 1, overflow: "auto", padding: "8px 20px 0" }}>
           
           <div style={{
     padding: "12px 14px",
@@ -3132,7 +3172,7 @@ function AnnotationSheet({ mode, existing, selectedText, onSave, onAddComment, o
     }}
   />
             </>}
-        </div>
+        </ShelfScrollArea>
 
         
         <div style={{
@@ -3261,7 +3301,7 @@ function TocDrawer({ book, currentChapterIndex = -1, onClose, onJumpPara }) {
             lineHeight: 1.3,
           }}>{book.title}</div>
         </div>
-        <div ref={listRef} className="reader-toc-list" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+        <ShelfScrollArea scrollRef={listRef} className="reader-toc-list" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
           {toc.map((c, i) => {
             const isCurrent = i === currentChapterIndex;
             return <button key={i} type="button" className="row-press"
@@ -3289,7 +3329,7 @@ function TocDrawer({ book, currentChapterIndex = -1, onClose, onJumpPara }) {
               }}>{isCurrent ? '当前章节' : `p.${c.page}`}</span>
             </button>;
           })}
-        </div>
+        </ShelfScrollArea>
       </div>
     </>
   );
@@ -3329,6 +3369,8 @@ function ShelfApp() {
     setRoute({ view: "shelf" });
   };
   const [tab, setTab] = React.useState("books");
+  const mainScrollRef=React.useRef(null);
+  useShelfScrollPosition(mainScrollRef);
   const closeToHost = () => {
     setTab("books");
     backToShelf();
@@ -3346,14 +3388,14 @@ function ShelfApp() {
     background: sv("--bg"),
     overflow: "hidden"
   }}>
-      <div style={{
+      <div ref={mainScrollRef} className="shelf-main-scroll" style={{
     height: "100%",
     overflow: "auto",
     overflowX: "hidden",
     WebkitOverflowScrolling: "touch",
     overscrollBehavior: "contain"
   }}>
-        <ShelfTopBar
+        <ShelfTopBar softEdge
     title={head.title}
     left={<button style={navBtn} aria-label="返回" onClick={closeToHost}><IconChevronL /></button>}
     right={head.right}
@@ -3392,49 +3434,51 @@ function ShelfApp() {
 }
 function ShelfBottomTabBar({ active, onTab }) {
   const tabs = [
-    { k: "marks", icon: (color) => <svg width="20" height="20" viewBox="0 0 20 20"><path d="M4 3h10a2 2 0 012 2v12l-3-2-3 2-3-2-3 2V5a2 2 0 012-2z" stroke={color} strokeWidth="1.6" fill="none" strokeLinejoin="round" /></svg> },
-    { k: "books", icon: (color) => <svg width="20" height="20" viewBox="0 0 20 20"><path d="M3 3.5C3 3.5 5 3 7.5 3.5C9 4 10 5 10 5V17C10 17 9 16 7.5 15.5C5.5 15 3 15.5 3 15.5V3.5Z" stroke={color} strokeWidth="1.5" fill="none" strokeLinejoin="round" /><path d="M17 3.5C17 3.5 15 3 12.5 3.5C11 4 10 5 10 5V17C10 17 11 16 12.5 15.5C14.5 15 17 15.5 17 15.5V3.5Z" stroke={color} strokeWidth="1.5" fill="none" strokeLinejoin="round" /></svg> },
-    { k: "me", icon: (color) => <svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="7" r="3.2" stroke={color} strokeWidth="1.6" fill="none" /><path d="M3.5 17c.7-3.4 3.4-5 6.5-5s5.8 1.6 6.5 5" stroke={color} strokeWidth="1.6" fill="none" strokeLinecap="round" /></svg> }
+    { k: 'marks',  icon: (color) => (
+      <svg width="20" height="20" viewBox="0 0 20 20"><path d="M4 3h10a2 2 0 012 2v12l-3-2-3 2-3-2-3 2V5a2 2 0 012-2z" stroke={color} strokeWidth="1.6" fill="none" strokeLinejoin="round"/></svg>
+    ) },
+    { k: 'books',  icon: (color) => (
+      <svg width="20" height="20" viewBox="0 0 20 20"><path d="M3 3.5C3 3.5 5 3 7.5 3.5C9 4 10 5 10 5V17C10 17 9 16 7.5 15.5C5.5 15 3 15.5 3 15.5V3.5Z" stroke={color} strokeWidth="1.5" fill="none" strokeLinejoin="round"/><path d="M17 3.5C17 3.5 15 3 12.5 3.5C11 4 10 5 10 5V17C10 17 11 16 12.5 15.5C14.5 15 17 15.5 17 15.5V3.5Z" stroke={color} strokeWidth="1.5" fill="none" strokeLinejoin="round"/></svg>
+    ) },
+    { k: 'me',     icon: (color) => (
+      <svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="7" r="3.2" stroke={color} strokeWidth="1.6" fill="none"/><path d="M3.5 17c.7-3.4 3.4-5 6.5-5s5.8 1.6 6.5 5" stroke={color} strokeWidth="1.6" fill="none" strokeLinecap="round"/></svg>
+    ) },
   ];
-  return <div style={{
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingTop: 10,
-    paddingLeft: 18,
-    paddingRight: 18,
-    // 跟日记保持一致：纯 28px，不再叠 env(safe-area-inset-bottom)
-    // （之前叠了 → home indicator 高度 ~34px 全空在底栏下方，比日记浮高一截）
-    paddingBottom: 28,
-    background: "linear-gradient(180deg, transparent 0%, " + sv("--bg") + " 28%)",
-    zIndex: 30
-  }}>
-      <div style={{
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-around",
-    background: sv("--bg")
-  }}>
-        {tabs.map((t) => {
-    const isActive = active === t.k;
-    return <button key={t.k} aria-label={t.k === "books" ? "书架" : t.k === "marks" ? "书签" : "我"} aria-current={isActive ? "page" : void 0} onClick={() => onTab(t.k)} style={{
-      background: isActive ? sv("--accent") : "transparent",
-      border: "none",
-      cursor: "pointer",
-      width: 48,
-      height: 48,
-      borderRadius: 24,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center"
+  return (
+    <div className="shelf-bottom-bar" style={{
+      position: 'absolute', bottom: 0, left: 0, right: 0,
+      paddingTop: 10, paddingLeft: 18, paddingRight: 18,
+      // 跟日记保持一致：纯 28px，不再叠 env(safe-area-inset-bottom)
+      // （之前叠了 → home indicator 高度 ~34px 全空在底栏下方，比日记浮高一截）
+      paddingBottom: 28,
+      background: 'transparent',
+      zIndex: 30,
     }}>
-              {t.icon(isActive ? sv("--on-accent") : sv("--text2"))}
-            </button>;
-  })}
+      <ShelfSoftEdge edge="bottom" size="calc(100% + 44px)"/>
+      <div className="shelf-tab-items" style={{
+        position:'relative', zIndex:1,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-around',
+        background: 'transparent',
+      }}>
+        {tabs.map(t => {
+          const isActive = active === t.k;
+          return (
+            <button key={t.k} aria-label={t.k === 'books' ? '书架' : t.k === 'marks' ? '书签' : '我'} aria-current={isActive ? 'page' : undefined} onClick={() => onTab(t.k)} style={{
+              background: isActive ? sv('--accent') : 'transparent',
+              border: 'none', cursor: 'pointer',
+              width: 48, height: 48, borderRadius: 24,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              {t.icon(isActive ? sv('--on-accent') : sv('--text2'))}
+            </button>
+          );
+        })}
       </div>
-    </div>;
+    </div>
+  );
 }
+
+
 function ShelfRoot() {
   return <div style={{
     position: "fixed",
