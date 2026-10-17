@@ -300,6 +300,50 @@ function ShelfScrollArea({ children, scrollRef: externalRef, style, ...props }) 
   </div>;
 }
 
+// Keep the scroll viewport behind the header: there is no clip edge below the filters.
+function ShelfLibraryViewport({ header, children }) {
+  const scrollRef=React.useRef(null), headerRef=React.useRef(null), layoutRef=React.useRef(null);
+  useShelfScrollPosition(scrollRef);
+  React.useLayoutEffect(()=>{
+    const header=headerRef.current, layout=layoutRef.current;
+    const measure=()=>layout.style.setProperty('--library-header-height',`${header.getBoundingClientRect().height}px`);
+    measure();
+    const observer=new ResizeObserver(measure);observer.observe(header);
+    return ()=>observer.disconnect();
+  },[]);
+  return <div className="shelf-library-layout" ref={layoutRef}>
+    <div className="shelf-library-chrome" ref={headerRef}>
+      <div className="shelf-library-material" aria-hidden="true">
+        <div className="shelf-library-solid"/>
+        <ShelfSoftEdge size={64} style={{top:'calc(100% - 32px)',opacity:'var(--soft-top,0)'}}/>
+      </div>
+      {header}
+    </div>
+    <div className="shelf-library-scroll" ref={scrollRef}>{children}</div>
+    <ShelfSoftEdge edge="bottom" size={48} style={{zIndex:5,opacity:'var(--soft-bottom,0)'}}/>
+  </div>;
+}
+
+function ShelfBackToTop({ scrollRef, enabled = true }) {
+  const [visible,setVisible]=React.useState(false);
+  React.useEffect(()=>{
+    const scroller=scrollRef.current;
+    if(!enabled || !scroller){setVisible(false);return;}
+    let frame=0;
+    const update=()=>{frame=0;setVisible(scroller.scrollTop>Math.max(480,scroller.clientHeight));};
+    const schedule=()=>{if(!frame)frame=requestAnimationFrame(update);};
+    scroller.addEventListener('scroll',schedule,{passive:true});
+    const resize=new ResizeObserver(schedule);resize.observe(scroller);update();
+    return ()=>{cancelAnimationFrame(frame);scroller.removeEventListener('scroll',schedule);resize.disconnect();};
+  },[scrollRef,enabled]);
+  if(!enabled || !visible)return null;
+  return <button type="button" className="shelf-back-to-top" aria-label="返回顶部" onClick={()=>scrollRef.current?.scrollTo({top:0,behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'})} style={{
+    position:'absolute',right:20,bottom:'calc(20px + env(safe-area-inset-bottom, 0px))',zIndex:20,
+    width:44,height:44,padding:0,border:0,borderRadius:'50%',background:'#1A1714',color:'#FFFFFF',
+    display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',boxShadow:'0 4px 16px rgba(0,0,0,.16)',
+  }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>;
+}
+
 function ShelfTopBar({ title, left, right, sideWidth = 40, softEdge = false }) {
   return (
     <div className="shelf-topbar" style={{
@@ -569,7 +613,12 @@ function ShelfView({ onOpenBook, onResume, onUpload, isShelfActive = true }) {
       .shelf-library-filters .shelf-status button { padding:7px 11px; }
       .shelf-library-filters .shelf-status button[aria-pressed=true] { background:var(--bg2); box-shadow:none; }
       .shelf-library-count { color:var(--text3); font-size:10px; white-space:nowrap; }
-      .shelf-library-scroll { overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+      .shelf-library-layout { position:relative; flex:1; min-height:0; isolation:isolate; }
+      .shelf-library-chrome { position:absolute; inset:0 0 auto; z-index:10; }
+      .shelf-library-material { position:absolute; inset:0; pointer-events:none; z-index:-1; }
+      .shelf-library-solid { position:absolute; inset:0 0 32px; background:var(--bg); }
+      .shelf-library-chrome > .shelf-topbar { background:transparent!important; }
+      .shelf-library-scroll { position:absolute; inset:0; padding-top:var(--library-header-height,222px); overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; scroll-padding-top:var(--library-header-height,222px); }
       .shelf-library-list { display:flex; flex-direction:column; gap:12px; padding:4px 20px calc(28px + env(safe-area-inset-bottom, 0px)); max-width:620px; margin:0 auto; }
       .library-book-row { display:flex; align-items:center; gap:19px; width:100%; padding:19px 18px; border:0; border-radius:18px; background:var(--card); color:var(--text); text-align:left; cursor:pointer; }
       .library-book-row:active { background:var(--card); }
@@ -594,18 +643,18 @@ function ShelfView({ onOpenBook, onResume, onUpload, isShelfActive = true }) {
     <div className="shelf-row-heading"><span>{tab === "reading" ? "其它在读" : "已读完"}</span><button className="shelf-all" onClick={(e) => openLibrary(e)}>查看全部</button></div>
     {recent.length ? <div className="shelf-carousel" ref={trackRef} aria-label={tab === "reading" ? "其它在读书籍" : "已读完书籍"}>{recent.map((book, index) => <BookGridCard key={book.id} book={book} index={index} onOpen={() => onOpenBook(book.id)} />)}</div> : <div className="shelf-empty">{!BOOKS.length ? <>书架还是空的<button className="shelf-resume" onClick={onUpload}>导入书籍</button></> : tab === "finished" ? "暂无已读完的书" : hero ? "暂无其它在读书籍" : "暂无在读书籍"}</div>}
     {libraryOpen && ReactDOM.createPortal(<section className="shelf-library" style={{ display: isShelfActive ? void 0 : "none" }} ref={panelRef} role="dialog" aria-modal="true" aria-label="全部书籍" onKeyDown={panelKeys}>
-      <ShelfTopBar title="全部书籍" right={<button className="shelf-close" style={navBtn} aria-label="返回书架" onClick={closeLibrary}><IconClose /></button>} />
+      <ShelfLibraryViewport header={<><ShelfTopBar title="全部书籍" right={<button className="shelf-close" style={navBtn} aria-label="返回书架" onClick={closeLibrary}><IconClose /></button>} />
       <header className="shelf-library-head">
         <div className="shelf-library-search"><IconSearch /><input ref={searchRef} placeholder="书名或作者" aria-label="搜索书名或作者" value={query} onChange={(e) => setQuery(e.target.value)} />{query && <button aria-label="清空搜索" onClick={() => {
     setQuery("");
     searchRef.current?.focus();
   }}><IconClose /></button>}</div>
         <div className="shelf-library-filters"><SlidingSegments className="shelf-status" style={{ "--slide-fill": "var(--bg2)" }}>{[["all", "全部"], ["reading", "在读"], ["finished", "读完"]].map(([key, label]) => <button key={key} aria-pressed={libraryTab === key} onClick={() => setLibraryTab(key)}>{label}</button>)}</SlidingSegments><span className="shelf-library-count">{collection.length} 本</span></div>
-      </header>
-      <ShelfScrollArea className="shelf-library-scroll"><div className="shelf-library-list">{collection.map((book) => <LibraryBookRow key={book.id} book={book} onOpen={() => {
+      </header></>}>
+      <div className="shelf-library-list">{collection.map((book) => <LibraryBookRow key={book.id} book={book} onOpen={() => {
     libraryFocusRef.current = document.activeElement;
     onOpenBook(book.id);
-  }} />)}</div>{!collection.length && <div className="shelf-empty">{needle ? "未找到匹配的书籍" : "暂无书籍"}</div>}</ShelfScrollArea>
+  }} />)}</div>{!collection.length && <div className="shelf-empty">{needle ? "未找到匹配的书籍" : "暂无书籍"}</div>}</ShelfLibraryViewport>
     </section>, document.body)}
   </main>;
 }
@@ -613,6 +662,7 @@ function BookDetailView({ bookId, onClose, onResume, onJumpAnnotation, onSetStat
   const book = bookById(bookId);
   if (!book) return null;
   const [tab, setTab] = React.useState(initialTab || "toc");
+  const detailScrollRef = React.useRef(null);
   const [menuOpen, setMenuOpen] = React.useState(false);
   const menuTriggerRef = React.useRef(null);
   const menuItemsRef = React.useRef(null);
@@ -804,7 +854,7 @@ function BookDetailView({ bookId, onClose, onResume, onJumpAnnotation, onSetStat
     animation: "fadeIn 200ms ease"
   }}>{toast}</div>}
 
-      <ShelfScrollArea data-book-detail-scroll style={{ flex: 1, overflow: "auto", overflowAnchor: "none" }}>
+      <ShelfScrollArea scrollRef={detailScrollRef} data-book-detail-scroll style={{ flex: 1, overflow: "auto", overflowAnchor: "none" }}>
         
         <div style={{
     padding: "12px 24px 24px",
@@ -991,6 +1041,7 @@ function BookDetailView({ bookId, onClose, onResume, onJumpAnnotation, onSetStat
         
         {false}
       </ShelfScrollArea>
+      <ShelfBackToTop scrollRef={detailScrollRef} enabled={tab==='annotations'}/>
     </div>;
 }
 function Stat2({ label, value }) {
@@ -1053,14 +1104,11 @@ function AnnotationSearch({ book, onJumpAnnotation }) {
   });
   return <div ref={searchAreaRef} style={{ minHeight: searchSpace.minHeight }}>
       <style>{`.annotation-search-input::placeholder { color:var(--text3); font-size:13px; opacity:1; }`}</style>
-      <div style={{
-    position: "sticky",
-    top: 0,
-    zIndex: 5,
-    background: sv("--bg"),
-    paddingBottom: 10,
-    marginBottom: 4
-  }}>
+      <div className="annotation-search-toolbar" style={{
+        position:'sticky',top:0,zIndex:8,background:sv('--bg'),
+        padding:'8px 16px 10px',margin:'-8px -16px 4px',
+      }}>
+        <ShelfSoftEdge size={28} style={{top:'100%'}}/>
         <div className="annotation-search-field" style={{
     display: "flex",
     alignItems: "center",
