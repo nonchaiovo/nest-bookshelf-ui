@@ -2,6 +2,10 @@
 
 纸感书封、自己的阅读节奏，以及留在页边的想法。
 
+**[在线体验原版 UI](https://nonchaiovo.github.io/nest-bookshelf-ui/)** · [浅色](https://nonchaiovo.github.io/nest-bookshelf-ui/?theme=light) · [深色](https://nonchaiovo.github.io/nest-bookshelf-ui/?theme=dark)
+
+无需下载或登录，直接操作书架、阅读器与批注。在线演示使用本仓库的 `index.html`，随 `main` 分支更新；使用通用身份和示例书籍，导入内容只保存在访问者自己的浏览器。
+
 <img src="preview.png" alt="NEST 书架、双向批注与阅读设置" width="720">
 
 NEST 新版书架的独立前端演示。使用 React 18，示例书籍、正文和批注均为演示数据；导入与编辑保存在当前浏览器。
@@ -93,6 +97,10 @@ npm test
 构建只更新 HTML 中的 `bookshelf-app` 脚本。样式和导入解析逻辑在 `index.html` 中修改。无需提交 `node_modules`。
 
 ## 给开发者与 AI 的接入说明
+
+接入前先打开[原版在线演示](https://nonchaiovo.github.io/nest-bookshelf-ui/)作为视觉与交互基准。有浏览器操作能力的 AI 应实际检查书架、全部书籍、详情批注搜索、阅读设置、目录和深浅色；仅能读取文字的工具请同时读取本说明与 `bookshelf.jsx`，不要声称已经看过渲染效果。
+
+优先复用原组件、样式变量和交互，只替换数据、身份配置、存储与自己的 AI 服务。不要仅凭截图重新生成一套相似界面。接入后以相同宽度、主题和状态与在线演示逐项对照：字体、间距、圆角、卡片尺寸、滚动层级、搜索吸顶、模糊边缘、文字选择与翻页位置。若页面不同，先检查宿主的全局 CSS、字体和额外滚动容器；用户主动要求的视觉修改应明确记录，不能把改版当作原版效果。
 
 沿用现有组件与设计变量，不要重新设计整套界面。`BookCover` 负责书封；`ShelfView` / `BookDetailView` 负责书架和详情；`ReaderView` 以段落索引和段内字符偏移（`{ paraIdx, offset }`）保存阅读位置；`ReaderParagraph` 用 `rangeStart` / `rangeEnd` 绘制高亮；`AnnotationSheet` 负责批注和回复。
 
