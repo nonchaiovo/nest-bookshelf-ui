@@ -1,1 +1,14 @@
-{"name":"nest-bookshelf-ui","version":"1.0.0","private":true,"type":"module","license":"SEE LICENSE IN LICENSE","scripts":{"build":"node build.mjs"},"devDependencies":{"esbuild":"0.25.0"}}
+{
+  "name": "nest-bookshelf-ui",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "SEE LICENSE IN LICENSE",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test reader-regression.test.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.0"
+  }
+}

@@ -16,10 +16,20 @@ NEST 新版书架的独立前端演示。使用 React 18，示例书籍、正文
 - `bookshelf.jsx`：书架、详情、阅读器、批注与共读界面的可编辑源码。
 - `build.mjs`、`package.json`、`package-lock.json`：本地构建工具与依赖清单。
 - `README.md`：使用方法、功能边界以及给开发者与 AI 的接入说明。
+- `reader-regression.test.mjs`：文字定位与触摸翻页的回归测试，运行 `npm test`。
 - `preview.png`：使用通用名字与示例数据的 3:4 界面展示。
 - `LICENSE`、`THIRD_PARTY_NOTICES.md`：原创内容许可及第三方声明。
 
 这是独立 UI 演示，数据保存在当前浏览器；不包含 NEST 完整应用、私有后端或真实 AI 服务。
+
+## 阅读器修复 · 2026-10-17
+
+- 连续调整字号时，以具体文字位置恢复阅读；长段落重排后不再因页码比例取整而跳读。
+- 左右翻页与上下滚动互相切换时，正文立即按新布局定位，不播放横向翻页动画，也不保留横向滚动偏移。
+- 手机和平板宽度变化时同样保留文字位置；只有主动翻页才使用翻页动画。
+- 双指缩放、触摸取消不会被识别为单指横滑翻页。
+
+字号改变后总页数和当前页码可能重新计算，定位依据是原文，不是旧页码。
 
 ## 本次 UI 更新 · 2026-10-17
 
@@ -69,15 +79,18 @@ const SHELF_PROFILES = {
 ```sh
 npm install
 npm run build
+npm test
 ```
 
 构建只更新 HTML 中的 `bookshelf-app` 脚本。样式和导入解析逻辑在 `index.html` 中修改。无需提交 `node_modules`。
 
 ## 给开发者与 AI 的接入说明
 
-沿用现有组件与设计变量，不要重新设计整套界面。`BookCover` 负责书封；`ShelfView` / `BookDetailView` 负责书架和详情；`ReaderView` 以段落索引和段内偏移保存阅读位置；`ReaderParagraph` 用 `rangeStart` / `rangeEnd` 绘制高亮；`AnnotationSheet` 负责批注和回复。
+沿用现有组件与设计变量，不要重新设计整套界面。`BookCover` 负责书封；`ShelfView` / `BookDetailView` 负责书架和详情；`ReaderView` 以段落索引和段内字符偏移（`{ paraIdx, offset }`）保存阅读位置；`ReaderParagraph` 用 `rangeStart` / `rangeEnd` 绘制高亮；`AnnotationSheet` 负责批注和回复。
 
 `BOOKS` 是当前内存数据，入口处的本地适配函数是接入自己存储的边界：`bookById`、`persistShelf`、`addUserBook`、`renameBook`、`removeBook`、`upsertUserAnnotation`、`removeUserAnnotation`、`appendReply`。书籍正文放在 `text[0].paragraphs`，目录项的 `paraIdx` 对应段落索引。批注包含段落索引、段内字符范围、颜色、作者、日期和回复列表。不要把屏幕分页号当作稳定定位：改变字号或宽度就会重新分页。
+
+旧版 `{ paraIdx, fraction }` 记录会在读取时迁移为字符偏移。字号、阅读方式或窗口大小变化只重新定位，不覆盖原文字锚点；主动翻页或滚动后才记录新的位置。程序恢复 `scrollTop` 时，不应把该滚动事件误当成用户主动滚动。
 
 阅读器的操作栏默认隐藏，始终浮在正文之上，不参与分页高度计算。只在空白轻点时切换；拖动、长按、已有文字选区、翻页边缘和功能按钮不触发。隐藏操作栏使用 `inert` 与 `aria-hidden`，避免键盘误聚焦。
 

@@ -2002,6 +2002,34 @@ function ReaderSettings({ prefs, onChange, onClose, onJump }) {
     </section>
   </>;
 }
+// Text offsets survive font and viewport changes, unlike screen page numbers.
+function readerTextRects(paragraph) {
+  const nodes = [];
+  const walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT);
+  let node, length = 0;
+  while ((node = walker.nextNode())) {
+    if (node.length) { nodes.push({node, start:length, end:length + node.length}); length += node.length; }
+  }
+  const range = document.createRange();
+  return { length, at(offset) {
+    if (!length) return paragraph.getBoundingClientRect();
+    const index = Math.max(0, Math.min(length - 1, offset));
+    const part = nodes.find(n => n.end > index);
+    range.setStart(part.node, index - part.start);
+    range.setEnd(part.node, index - part.start + 1);
+    return range.getBoundingClientRect();
+  }};
+}
+function readerOffsetAtPosition(rects, origin, position, isScroll, step) {
+  let lo = 0, hi = Math.max(0, rects.length - 1);
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2), r = rects.at(mid);
+    const before = isScroll ? r.bottom - origin.top <= position + 1
+      : Math.floor((r.left - origin.left + 2) / step) < position;
+    if (before) lo = mid + 1; else hi = mid;
+  }
+  return lo;
+}
 function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
   const book = bookById(bookId);
   if (!book) return null;
@@ -2033,6 +2061,8 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
   const [innerW, setInnerW] = React.useState(0);
   const [layoutVersion, setLayoutVersion] = React.useState(0);
   const [layoutReady, setLayoutReady] = React.useState(false);
+  const [animatePage, setAnimatePage] = React.useState(false);
+  const restoredScrollRef = React.useRef(null);
   const PAGE_STORAGE_KEY = "nest_bookshelf_demo_reader_page_" + bookId;
   const ANCHOR_STORAGE_KEY = "nest_bookshelf_demo_reader_anchor_" + bookId;
   const [page, setPage] = React.useState(() => {
@@ -2058,39 +2088,49 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
   currentPageRef.current = page;
   const scrollFrame = React.useRef(null);
   const contentLength = book.text?.[0]?.paragraphs?.length || 0;
-  const rememberPosition = (position) => {
-    const g = geometryRef.current;
-    const entry = g.entries.find((e) => e.end > position + 0.01) || g.entries[g.entries.length - 1];
-    if (!entry) return;
-    const anchor = { paraIdx: entry.paraIdx, fraction: Math.max(0, Math.min(0.999, (position - entry.start) / Math.max(1e-3, entry.end - entry.start))) };
+  const saveAnchor = (anchor) => {
     anchorRef.current = anchor;
-    setCurrentParaIdx(entry.paraIdx);
-    try {
-      localStorage.setItem(ANCHOR_STORAGE_KEY, JSON.stringify(anchor));
-    } catch {
-    }
+    setCurrentParaIdx(anchor.paraIdx);
+    try { localStorage.setItem(ANCHOR_STORAGE_KEY, JSON.stringify(anchor)); } catch {}
+  };
+  const rememberPosition = (position) => {
+    const g = geometryRef.current, col = colRef.current;
+    const entry = g.entries.find(e => e.end > position + .01) || g.entries[g.entries.length - 1];
+    const paragraph = entry && col?.querySelector(`[data-para-idx="${entry.paraIdx}"]`);
+    if (!paragraph) return;
+    const offset = readerOffsetAtPosition(readerTextRects(paragraph), col.getBoundingClientRect(), position, isScroll, g.step);
+    saveAnchor({paraIdx:entry.paraIdx, offset});
   };
   const onReaderScroll = () => {
-    if (!isScroll || scrollFrame.current != null) return;
+    const vp = pagerRef.current;
+    if (!isScroll || !vp || geometryRef.current.mode !== prefs.mode) return;
+    // Programmatic restoration must not replace the original text anchor.
+    if (restoredScrollRef.current != null && Math.abs(vp.scrollTop - restoredScrollRef.current) < 1) return;
+    restoredScrollRef.current = null;
+    if (scrollFrame.current != null) return;
     scrollFrame.current = requestAnimationFrame(() => {
       scrollFrame.current = null;
-      const vp = pagerRef.current, g = geometryRef.current;
-      if (!vp) return;
+      const g = geometryRef.current;
+      if (g.mode !== "scroll") return;
       rememberPosition(vp.scrollTop);
       const atEnd = vp.scrollTop + vp.clientHeight >= vp.scrollHeight - 2;
       setPage(atEnd ? g.count - 1 : Math.min(g.count - 1, Math.floor(vp.scrollTop / g.step)));
     });
   };
-  React.useEffect(() => () => {
-    if (scrollFrame.current != null) cancelAnimationFrame(scrollFrame.current);
-  }, []);
+  React.useEffect(() => () => { if (scrollFrame.current != null) cancelAnimationFrame(scrollFrame.current); }, []);
   const updatePrefs = (patch) => {
-    if (patch.mode && patch.mode !== prefs.mode || patch.size && patch.size !== prefs.size) {
-      if (scrollFrame.current != null) cancelAnimationFrame(scrollFrame.current);
+    if ((patch.mode && patch.mode !== prefs.mode) || (patch.size && patch.size !== prefs.size)) {
+      if (scrollFrame.current != null) {
+        cancelAnimationFrame(scrollFrame.current);
+        if (isScroll && pagerRef.current) rememberPosition(pagerRef.current.scrollTop);
+      }
       scrollFrame.current = null;
+      // Stop an in-flight turn before changing the column layout.
+      if (colRef.current) colRef.current.style.transition = "none";
+      setAnimatePage(false);
       setLayoutReady(false);
     }
-    setPrefs((p) => ({ ...p, ...patch }));
+    setPrefs(p => ({...p, ...patch}));
   };
   React.useEffect(() => {
     try {
@@ -2102,6 +2142,7 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
     const vp = pagerRef.current, col = colRef.current;
     if (!vp || !col || !contentLength) return;
     const measure = () => {
+      col.style.transition = "none";
       const cs = getComputedStyle(vp);
       const w = vp.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
       if (w <= 0 || vp.clientHeight <= 0) return;
@@ -2117,20 +2158,29 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
         return { paraIdx: Number(p.dataset.paraIdx), start, end };
       });
       const map = Array.from({ length: count }, (_, i) => (entries.find((e) => e.end > (isScroll ? i * step : i) + 0.01) || entries[entries.length - 1])?.paraIdx || 0);
-      geometryRef.current = { entries, map, step, count };
-      const initialPara = !jumpedRef.current ? openAnnotationId ? annotations.find((a) => a.id === openAnnotationId)?.paraIdx : openParaIdx : null;
-      const anchor = initialPara != null ? { paraIdx: initialPara, fraction: 0 } : anchorRef.current;
-      const target = anchor && entries.find((e) => e.paraIdx === anchor.paraIdx);
-      const position = target ? target.start + (target.end - target.start) * (Number(anchor.fraction) || 0) : currentPageRef.current * (isScroll ? step : 1);
-      if (isScroll) vp.scrollTop = Math.max(0, position);
-      else vp.scrollTop = 0;
+      geometryRef.current = {entries, map, step, count, mode:prefs.mode};
+      const initialPara = !jumpedRef.current ? (openAnnotationId ? annotations.find(a => a.id === openAnnotationId)?.paraIdx : openParaIdx) : null;
+      const anchor = initialPara != null ? {paraIdx:initialPara, offset:0} : anchorRef.current;
+      const target = anchor && entries.find(e => e.paraIdx === anchor.paraIdx);
+      let position = target ? target.start + (target.end - target.start) * (Number(anchor.fraction) || 0) : currentPageRef.current * (isScroll ? step : 1);
+      if (target && Number.isFinite(anchor.offset)) {
+        const paragraph = col.querySelector(`[data-para-idx="${anchor.paraIdx}"]`);
+        const rect = readerTextRects(paragraph).at(anchor.offset);
+        position = isScroll ? rect.top - cr.top : Math.floor((rect.left - cr.left + 2) / step);
+      }
+      // Apply the final layout before paint: settings changes are not page turns.
+      col.style.transition = "none";
+      vp.scrollLeft = 0;
+      vp.scrollTop = isScroll ? Math.max(0, position) : 0;
+      restoredScrollRef.current = isScroll ? vp.scrollTop : null;
       const nextPage = Math.max(0, Math.min(count - 1, Math.floor(isScroll ? vp.scrollTop / step : position)));
-      setInnerW(w);
-      setPageCount(count);
-      setPage(nextPage);
-      rememberPosition(isScroll ? vp.scrollTop : nextPage);
-      setLayoutVersion((v) => v + 1);
-      setLayoutReady(true);
+      col.style.transform = isScroll ? "none" : `translateX(${-nextPage * step}px)`;
+      currentPageRef.current = nextPage;
+      setAnimatePage(false);
+      setInnerW(w); setPageCount(count); setPage(nextPage);
+      if (target && Number.isFinite(anchor.offset)) saveAnchor(anchor);
+      else rememberPosition(isScroll ? vp.scrollTop : nextPage);
+      setLayoutVersion(v => v + 1); setLayoutReady(true);
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -2139,7 +2189,6 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
   }, [bookId, contentLength, prefs.mode, prefs.size]);
   React.useEffect(() => {
     if (!layoutReady) return;
-    if (!isScroll) rememberPosition(page);
     try {
       localStorage.setItem(PAGE_STORAGE_KEY, String(page));
     } catch {
@@ -2154,9 +2203,16 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
     const tocPage = Math.floor(currentParaIdx / 30) + 1;
     return (book.toc || []).filter((c) => c.paraIdx != null ? c.paraIdx <= currentParaIdx : c.page <= tocPage).slice(-1)[0]?.title || "";
   }, [currentParaIdx, book.toc]);
-  const turn = (dir) => {
-    if (!isScroll) setPage((p) => Math.max(0, Math.min(pageCount - 1, p + dir)));
+  const goToPage = (next) => {
+    if (isScroll) return;
+    next = Math.max(0, Math.min(pageCount - 1, next));
+    if (next === currentPageRef.current) return;
+    rememberPosition(next);
+    currentPageRef.current = next;
+    setAnimatePage(true);
+    setPage(next);
   };
+  const turn = (dir) => goToPage(currentPageRef.current + dir);
   const jumpToParagraph = (idx, annotationId) => {
     const col = colRef.current, vp = pagerRef.current;
     if (!col || !vp) return;
@@ -2169,8 +2225,7 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
       onReaderScroll();
     } else {
       const next = Math.max(0, Math.min(pageCount - 1, Math.floor((r.left - cr.left + 2) / (innerW + PAGE_GAP))));
-      rememberPosition(next);
-      setPage(next);
+      goToPage(next);
     }
   };
   React.useEffect(() => {
@@ -2222,24 +2277,32 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
   };
 
   const touchRef = React.useRef(null);
+  const cancelTouchTurn = () => {
+    touchRef.current = null;
+    if (readingTapRef.current) readingTapRef.current.moved = true;
+  };
   const onTouchStart = (e) => {
+    if (e.touches.length !== 1) { cancelTouchTurn(); return; }
     if (isScroll) return;
     const t = e.touches[0];
-    touchRef.current = { x: t.clientX, y: t.clientY, t: Date.now() };
+    touchRef.current = { id:t.identifier, x:t.clientX, y:t.clientY, t:Date.now() };
+  };
+  const onTouchMove = (e) => {
+    if (e.touches.length !== 1) cancelTouchTurn();
   };
   const onTouchEnd = (e) => {
     const s = touchRef.current;
-    if (!s || isScroll || window.getSelection()?.toString()) return;
-    const t = e.changedTouches[0];
-    const dx = t.clientX - s.x;
-    const dy = t.clientY - s.y;
-    const dt = Date.now() - s.t;
     touchRef.current = null;
+    if (!s || isScroll || e.touches.length || window.getSelection()?.toString()) return;
+    const t = Array.from(e.changedTouches).find(t => t.identifier === s.id);
+    if (!t) return;
+    const dx = t.clientX - s.x, dy = t.clientY - s.y, dt = Date.now() - s.t;
     if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.6 && dt < 600) {
-      if (dx < 0) turn(1);
-      else turn(-1);
+      if (readingTapRef.current) readingTapRef.current.moved = true;
+      turn(dx < 0 ? 1 : -1);
     }
   };
+
   const needsLoad = false, loadErr = false;
   const chapter = book.text?.[0]?.paragraphs?.length ? book.text[0] : null;
   const saveAnnotation = ({ color, note }) => {
@@ -2438,6 +2501,8 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
     onClick={toggleReadingChrome}
     onTouchStart={onTouchStart}
     onTouchEnd={onTouchEnd}
+    onTouchMove={onTouchMove}
+    onTouchCancel={cancelTouchTurn}
     style={{
       position: "absolute",
       top: "calc(12px + env(safe-area-inset-top, 0px))",
@@ -2451,7 +2516,7 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
       overflowY: isScroll ? "auto" : "hidden",
       overscrollBehavior: "contain",
       overflowAnchor: "none",
-      touchAction: "pan-y"
+      touchAction: "pan-y pinch-zoom"
     }}
   >
         <div ref={colRef} style={{
@@ -2460,7 +2525,7 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
     columnGap: PAGE_GAP,
     columnFill: "auto",
     transform: isScroll ? "none" : `translateX(${-page * (innerW + PAGE_GAP)}px)`,
-    transition: isScroll ? "none" : "transform 340ms cubic-bezier(0.3,0,0.2,1)"
+    transition: !isScroll && animatePage ? "transform 340ms cubic-bezier(0.3,0,0.2,1)" : "none"
   }}>
           <div style={{
     fontFamily: SHELF_SANS,
@@ -2562,7 +2627,7 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
       if (e.key === "Enter") {
         const v = parseInt(e.target.value);
         if (v >= 1 && v <= pageCount) {
-          setPage(v - 1);
+          goToPage(v - 1);
           setShowJumpPage(false);
         }
       }
@@ -2608,7 +2673,7 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
     const input = document.querySelector('input[type="number"]');
     const v = parseInt(input?.value);
     if (v >= 1 && v <= pageCount) {
-      setPage(v - 1);
+      goToPage(v - 1);
       setShowJumpPage(false);
     }
   }} style={{
