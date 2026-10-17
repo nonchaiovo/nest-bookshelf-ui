@@ -1501,7 +1501,9 @@ function ShelfView({ onOpenBook, onResume, onUpload, isShelfActive = true }) {
       .shelf-library-filters .shelf-status button { padding:7px 11px; }
       .shelf-library-filters .shelf-status button[aria-pressed=true] { background:var(--bg2); box-shadow:none; }
       .shelf-library-count { color:var(--text3); font-size:10px; white-space:nowrap; }
-      .shelf-library-scroll { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+      .shelf-library-content { position:relative; flex:1; min-height:0; }
+      .shelf-library-content::after { content:''; position:absolute; inset:0 0 auto; height:28px; z-index:1; pointer-events:none; opacity:var(--library-edge-opacity,0); background:color-mix(in srgb,var(--bg) 60%,transparent); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); mask-image:linear-gradient(to bottom,#000 0%,#000 15%,transparent 100%); -webkit-mask-image:linear-gradient(to bottom,#000 0%,#000 15%,transparent 100%); }
+      .shelf-library-scroll { height:100%; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
       .shelf-library-list { display:flex; flex-direction:column; gap:12px; padding:4px 20px calc(28px + env(safe-area-inset-bottom, 0px)); max-width:620px; margin:0 auto; }
       .library-book-row { display:flex; align-items:center; gap:19px; width:100%; padding:19px 18px; border:0; border-radius:18px; background:var(--card); color:var(--text); text-align:left; cursor:pointer; }
       .library-book-row:active { background:var(--card); }
@@ -1521,10 +1523,10 @@ function ShelfView({ onOpenBook, onResume, onUpload, isShelfActive = true }) {
   } }, label, /* @__PURE__ */ React.createElement("small", null, count))))), /* @__PURE__ */ React.createElement("div", { className: "shelf-row-heading" }, /* @__PURE__ */ React.createElement("span", null, tab === "reading" ? "其它在读" : "已读完"), /* @__PURE__ */ React.createElement("button", { className: "shelf-all", onClick: (e) => openLibrary(e) }, "查看全部")), recent.length ? /* @__PURE__ */ React.createElement("div", { className: "shelf-carousel", ref: trackRef, "aria-label": tab === "reading" ? "其它在读书籍" : "已读完书籍" }, recent.map((book, index) => /* @__PURE__ */ React.createElement(BookGridCard, { key: book.id, book, index, onOpen: () => onOpenBook(book.id) }))) : /* @__PURE__ */ React.createElement("div", { className: "shelf-empty" }, !BOOKS.length ? /* @__PURE__ */ React.createElement(React.Fragment, null, "书架还是空的", /* @__PURE__ */ React.createElement("button", { className: "shelf-resume", onClick: onUpload }, "导入书籍")) : tab === "finished" ? "暂无已读完的书" : hero ? "暂无其它在读书籍" : "暂无在读书籍"), libraryOpen && ReactDOM.createPortal(/* @__PURE__ */ React.createElement("section", { className: "shelf-library", style: { display: isShelfActive ? void 0 : "none" }, ref: panelRef, role: "dialog", "aria-modal": "true", "aria-label": "全部书籍", onKeyDown: panelKeys }, /* @__PURE__ */ React.createElement(ShelfTopBar, { title: "全部书籍", right: /* @__PURE__ */ React.createElement("button", { className: "shelf-close", style: navBtn, "aria-label": "返回书架", onClick: closeLibrary }, /* @__PURE__ */ React.createElement(IconClose, null)) }), /* @__PURE__ */ React.createElement("header", { className: "shelf-library-head" }, /* @__PURE__ */ React.createElement("div", { className: "shelf-library-search" }, /* @__PURE__ */ React.createElement(IconSearch, null), /* @__PURE__ */ React.createElement("input", { ref: searchRef, placeholder: "书名或作者", "aria-label": "搜索书名或作者", value: query, onChange: (e) => setQuery(e.target.value) }), query && /* @__PURE__ */ React.createElement("button", { "aria-label": "清空搜索", onClick: () => {
     setQuery("");
     searchRef.current?.focus();
-  } }, /* @__PURE__ */ React.createElement(IconClose, null))), /* @__PURE__ */ React.createElement("div", { className: "shelf-library-filters" }, /* @__PURE__ */ React.createElement(SlidingSegments, { className: "shelf-status", style: { "--slide-fill": "var(--bg2)" } }, [["all", "全部"], ["reading", "在读"], ["finished", "读完"]].map(([key, label]) => /* @__PURE__ */ React.createElement("button", { key, "aria-pressed": libraryTab === key, onClick: () => setLibraryTab(key) }, label))), /* @__PURE__ */ React.createElement("span", { className: "shelf-library-count" }, collection.length, " 本"))), /* @__PURE__ */ React.createElement("div", { className: "shelf-library-scroll" }, /* @__PURE__ */ React.createElement("div", { className: "shelf-library-list" }, collection.map((book) => /* @__PURE__ */ React.createElement(LibraryBookRow, { key: book.id, book, onOpen: () => {
+  } }, /* @__PURE__ */ React.createElement(IconClose, null))), /* @__PURE__ */ React.createElement("div", { className: "shelf-library-filters" }, /* @__PURE__ */ React.createElement(SlidingSegments, { className: "shelf-status", style: { "--slide-fill": "var(--bg2)" } }, [["all", "全部"], ["reading", "在读"], ["finished", "读完"]].map(([key, label]) => /* @__PURE__ */ React.createElement("button", { key, "aria-pressed": libraryTab === key, onClick: () => setLibraryTab(key) }, label))), /* @__PURE__ */ React.createElement("span", { className: "shelf-library-count" }, collection.length, " 本"))), /* @__PURE__ */ React.createElement("div", { className: "shelf-library-content" }, /* @__PURE__ */ React.createElement("div", { className: "shelf-library-scroll", onScroll: (e) => e.currentTarget.parentElement.style.setProperty("--library-edge-opacity", String(Math.min(1, Math.max(0, e.currentTarget.scrollTop) / 24))) }, /* @__PURE__ */ React.createElement("div", { className: "shelf-library-list" }, collection.map((book) => /* @__PURE__ */ React.createElement(LibraryBookRow, { key: book.id, book, onOpen: () => {
     libraryFocusRef.current = document.activeElement;
     onOpenBook(book.id);
-  } }))), !collection.length && /* @__PURE__ */ React.createElement("div", { className: "shelf-empty" }, needle ? "未找到匹配的书籍" : "暂无书籍"))), document.body));
+  } }))), !collection.length && /* @__PURE__ */ React.createElement("div", { className: "shelf-empty" }, needle ? "未找到匹配的书籍" : "暂无书籍")))), document.body));
 }
 function BookDetailView({ bookId, onClose, onResume, onJumpAnnotation, onSetStatus, onDelete, initialTab }) {
   const book = bookById(bookId);
@@ -2760,6 +2762,14 @@ function readerOffsetAtPosition(rects, origin, position, isScroll, step) {
   }
   return lo;
 }
+function readerChapterIndex(toc, paraIdx) {
+  const legacyPage = Math.floor(paraIdx / 30) + 1;
+  let current = -1;
+  (toc || []).forEach((chapter, index) => {
+    if (chapter.paraIdx != null ? chapter.paraIdx <= paraIdx : chapter.page <= legacyPage) current = index;
+  });
+  return current;
+}
 function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
   const book = bookById(bookId);
   if (!book) return null;
@@ -2935,10 +2945,8 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
     book.lastReadAt = TODAY_SHELF;
     persistShelf();
   }, [page, pageCount, layoutReady, isScroll, bookId]);
-  const currentChapterTitle = React.useMemo(() => {
-    const tocPage = Math.floor(currentParaIdx / 30) + 1;
-    return (book.toc || []).filter((c) => c.paraIdx != null ? c.paraIdx <= currentParaIdx : c.page <= tocPage).slice(-1)[0]?.title || "";
-  }, [currentParaIdx, book.toc]);
+  const currentChapterIndex = React.useMemo(() => readerChapterIndex(book.toc, currentParaIdx), [currentParaIdx, book.toc]);
+  const currentChapterTitle = book.toc?.[currentChapterIndex]?.title || "";
   const goToPage = (next) => {
     if (isScroll) return;
     next = Math.max(0, Math.min(pageCount - 1, next));
@@ -3453,6 +3461,7 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
     TocDrawer,
     {
       book,
+      currentChapterIndex,
       onClose: () => setShowToc(false),
       onJumpPara: (idx) => {
         setShowToc(false);
@@ -3883,14 +3892,23 @@ function AnnotationSheet({ mode, existing, selectedText, onSave, onAddComment, o
     letterSpacing: 0.5
   } }, "高亮 + 批注")))));
 }
-function TocDrawer({ book, onClose, onJumpPara }) {
+function TocDrawer({ book, currentChapterIndex = -1, onClose, onJumpPara }) {
+  const listRef = React.useRef(null);
+  const currentRef = React.useRef(null);
+  React.useLayoutEffect(() => {
+    const list = listRef.current, row = currentRef.current;
+    if (!list || !row) return;
+    const listRect = list.getBoundingClientRect(), rowRect = row.getBoundingClientRect();
+    list.scrollTop += rowRect.top - listRect.top - (list.clientHeight - rowRect.height) / 2;
+  }, [currentChapterIndex]);
+  const toc = book.toc || [];
   return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { onClick: onClose, style: {
     position: "absolute",
     inset: 0,
     background: "rgba(0,0,0,0.32)",
     zIndex: 120,
     animation: "fadeIn 200ms ease"
-  } }), /* @__PURE__ */ React.createElement("div", { style: {
+  } }), /* @__PURE__ */ React.createElement("div", { className: "reader-toc", style: {
     position: "absolute",
     top: 0,
     bottom: 0,
@@ -3903,8 +3921,8 @@ function TocDrawer({ book, onClose, onJumpPara }) {
     display: "flex",
     flexDirection: "column"
   } }, /* @__PURE__ */ React.createElement("div", { style: {
-    paddingTop: 58,
     padding: "58px 16px 14px",
+    flexShrink: 0,
     borderBottom: "0.5px solid " + sv("--line")
   } }, /* @__PURE__ */ React.createElement("div", { style: {
     fontFamily: SHELF_SANS,
@@ -3919,22 +3937,61 @@ function TocDrawer({ book, onClose, onJumpPara }) {
     fontWeight: 700,
     color: sv("--text"),
     lineHeight: 1.3
-  } }, book.title)), /* @__PURE__ */ React.createElement("div", { style: { flex: 1, overflow: "auto" } }, book.toc.map((c, i) => /* @__PURE__ */ React.createElement("div", { key: i, className: "row-press", onClick: () => {
-    if (c.paraIdx != null && onJumpPara) onJumpPara(c.paraIdx);
-    else onClose();
-  }, style: {
-    padding: "14px 18px",
-    cursor: "pointer",
-    borderBottom: i === book.toc.length - 1 ? "none" : "0.5px solid " + sv("--line"),
-    display: "flex",
-    alignItems: "center"
-  } }, /* @__PURE__ */ React.createElement("span", { style: {
-    fontFamily: SHELF_SANS,
-    fontSize: 11,
-    color: sv("--text3"),
-    width: 28,
-    flexShrink: 0
-  } }, String(i + 1).padStart(2, "0")), /* @__PURE__ */ React.createElement("span", { style: { flex: 1, fontFamily: SHELF_SERIF, fontSize: 14.5, color: sv("--text") } }, c.title), /* @__PURE__ */ React.createElement("span", { style: { fontFamily: SHELF_SANS, fontSize: 11, color: sv("--text3") } }, "p.", c.page))))));
+  } }, book.title)), /* @__PURE__ */ React.createElement("div", { ref: listRef, className: "reader-toc-list", style: { flex: 1, minHeight: 0, overflow: "auto" } }, toc.map((c, i) => {
+    const isCurrent = i === currentChapterIndex;
+    return /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        key: i,
+        type: "button",
+        className: "row-press",
+        ref: isCurrent ? currentRef : null,
+        "aria-current": isCurrent ? "location" : void 0,
+        onClick: () => {
+          if (c.paraIdx != null && onJumpPara) onJumpPara(c.paraIdx);
+          else onClose();
+        },
+        style: {
+          width: "100%",
+          padding: "14px 18px",
+          cursor: "pointer",
+          border: 0,
+          background: "transparent",
+          textAlign: "left",
+          borderBottom: i === toc.length - 1 ? "none" : "0.5px solid " + sv("--line"),
+          display: "flex",
+          alignItems: "center",
+          WebkitTapHighlightColor: "transparent"
+        }
+      },
+      /* @__PURE__ */ React.createElement("span", { style: {
+        fontFamily: SHELF_SANS,
+        fontSize: 11,
+        color: sv("--text3"),
+        width: 28,
+        flexShrink: 0
+      } }, String(i + 1).padStart(2, "0")),
+      /* @__PURE__ */ React.createElement("span", { style: {
+        flex: 1,
+        minWidth: 0,
+        overflowWrap: "anywhere",
+        fontFamily: SHELF_SERIF,
+        fontSize: 14.5,
+        lineHeight: 1.5,
+        fontWeight: isCurrent ? 700 : 400,
+        color: sv("--text")
+      } }, c.title),
+      /* @__PURE__ */ React.createElement("span", { style: {
+        marginLeft: 10,
+        flexShrink: 0,
+        whiteSpace: "nowrap",
+        fontFamily: SHELF_SANS,
+        fontSize: isCurrent ? 10 : 11,
+        fontWeight: isCurrent ? 600 : 400,
+        color: sv(isCurrent ? "--accent" : "--text3")
+      } }, isCurrent ? "当前章节" : `p.${c.page}`)
+    );
+  }))));
 }
 Object.assign(window, { ReaderView, ReaderEmpty, AnnotationSheet, TocDrawer, splitSentences });
 function ShelfApp() {

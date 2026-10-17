@@ -521,7 +521,9 @@ function ShelfView({ onOpenBook, onResume, onUpload, isShelfActive = true }) {
       .shelf-library-filters .shelf-status button { padding:7px 11px; }
       .shelf-library-filters .shelf-status button[aria-pressed=true] { background:var(--bg2); box-shadow:none; }
       .shelf-library-count { color:var(--text3); font-size:10px; white-space:nowrap; }
-      .shelf-library-scroll { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+      .shelf-library-content { position:relative; flex:1; min-height:0; }
+      .shelf-library-content::after { content:''; position:absolute; inset:0 0 auto; height:28px; z-index:1; pointer-events:none; opacity:var(--library-edge-opacity,0); background:color-mix(in srgb,var(--bg) 60%,transparent); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); mask-image:linear-gradient(to bottom,#000 0%,#000 15%,transparent 100%); -webkit-mask-image:linear-gradient(to bottom,#000 0%,#000 15%,transparent 100%); }
+      .shelf-library-scroll { height:100%; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
       .shelf-library-list { display:flex; flex-direction:column; gap:12px; padding:4px 20px calc(28px + env(safe-area-inset-bottom, 0px)); max-width:620px; margin:0 auto; }
       .library-book-row { display:flex; align-items:center; gap:19px; width:100%; padding:19px 18px; border:0; border-radius:18px; background:var(--card); color:var(--text); text-align:left; cursor:pointer; }
       .library-book-row:active { background:var(--card); }
@@ -554,11 +556,11 @@ function ShelfView({ onOpenBook, onResume, onUpload, isShelfActive = true }) {
   }}><IconClose /></button>}</div>
         <div className="shelf-library-filters"><SlidingSegments className="shelf-status" style={{ "--slide-fill": "var(--bg2)" }}>{[["all", "全部"], ["reading", "在读"], ["finished", "读完"]].map(([key, label]) => <button key={key} aria-pressed={libraryTab === key} onClick={() => setLibraryTab(key)}>{label}</button>)}</SlidingSegments><span className="shelf-library-count">{collection.length} 本</span></div>
       </header>
-      <div className="shelf-library-scroll"><div className="shelf-library-list">{collection.map((book) => <LibraryBookRow key={book.id} book={book} onOpen={() => {
+      <div className="shelf-library-content"><div className="shelf-library-scroll" onScroll={e => e.currentTarget.parentElement.style.setProperty('--library-edge-opacity', String(Math.min(1, Math.max(0, e.currentTarget.scrollTop) / 24)))}><div className="shelf-library-list">{collection.map((book) => <LibraryBookRow key={book.id} book={book} onOpen={() => {
     libraryFocusRef.current = document.activeElement;
     onOpenBook(book.id);
   }} />)}</div>{!collection.length && <div className="shelf-empty">{needle ? "未找到匹配的书籍" : "暂无书籍"}</div>}</div>
-    </section>, document.body)}
+    </div></section>, document.body)}
   </main>;
 }
 function BookDetailView({ bookId, onClose, onResume, onJumpAnnotation, onSetStatus, onDelete, initialTab }) {
@@ -2030,6 +2032,14 @@ function readerOffsetAtPosition(rects, origin, position, isScroll, step) {
   }
   return lo;
 }
+function readerChapterIndex(toc, paraIdx) {
+  const legacyPage = Math.floor(paraIdx / 30) + 1;
+  let current = -1;
+  (toc || []).forEach((chapter, index) => {
+    if (chapter.paraIdx != null ? chapter.paraIdx <= paraIdx : chapter.page <= legacyPage) current = index;
+  });
+  return current;
+}
 function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
   const book = bookById(bookId);
   if (!book) return null;
@@ -2200,10 +2210,8 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
     book.lastReadAt = TODAY_SHELF;
     persistShelf();
   }, [page, pageCount, layoutReady, isScroll, bookId]);
-  const currentChapterTitle = React.useMemo(() => {
-    const tocPage = Math.floor(currentParaIdx / 30) + 1;
-    return (book.toc || []).filter((c) => c.paraIdx != null ? c.paraIdx <= currentParaIdx : c.page <= tocPage).slice(-1)[0]?.title || "";
-  }, [currentParaIdx, book.toc]);
+  const currentChapterIndex = React.useMemo(() => readerChapterIndex(book.toc, currentParaIdx), [currentParaIdx, book.toc]);
+  const currentChapterTitle = book.toc?.[currentChapterIndex]?.title || '';
   const goToPage = (next) => {
     if (isScroll) return;
     next = Math.max(0, Math.min(pageCount - 1, next));
@@ -2737,6 +2745,7 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
       
       {showToc && <TocDrawer
     book={book}
+    currentChapterIndex={currentChapterIndex}
     onClose={() => setShowToc(false)}
     onJumpPara={(idx) => {
       setShowToc(false);
@@ -3215,74 +3224,77 @@ function AnnotationSheet({ mode, existing, selectedText, onSave, onAddComment, o
       </div>
     </>;
 }
-function TocDrawer({ book, onClose, onJumpPara }) {
-  return <>
+function TocDrawer({ book, currentChapterIndex = -1, onClose, onJumpPara }) {
+  const listRef = React.useRef(null);
+  const currentRef = React.useRef(null);
+  React.useLayoutEffect(() => {
+    const list = listRef.current, row = currentRef.current;
+    if (!list || !row) return;
+    // Move only the directory list; opening it must not move the reading page.
+    const listRect = list.getBoundingClientRect(), rowRect = row.getBoundingClientRect();
+    list.scrollTop += rowRect.top - listRect.top - (list.clientHeight - rowRect.height) / 2;
+  }, [currentChapterIndex]);
+  const toc = book.toc || [];
+  return (
+    <>
       <div onClick={onClose} style={{
-    position: "absolute",
-    inset: 0,
-    background: "rgba(0,0,0,0.32)",
-    zIndex: 120,
-    animation: "fadeIn 200ms ease"
-  }} />
-      <div style={{
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    right: 0,
-    zIndex: 121,
-    width: "78%",
-    background: sv("--bg"),
-    boxShadow: "-8px 0 24px rgba(0,0,0,0.15)",
-    animation: "slideLeft 320ms cubic-bezier(0.2,0,0.2,1)",
-    display: "flex",
-    flexDirection: "column"
-  }}>
+        position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.32)',
+        zIndex: 120, animation: 'fadeIn 200ms ease',
+      }} />
+      <div className="reader-toc" style={{
+        position: 'absolute', top: 0, bottom: 0, right: 0, zIndex: 121,
+        width: '78%', background: sv('--bg'),
+        boxShadow: '-8px 0 24px rgba(0,0,0,0.15)',
+        animation: 'slideLeft 320ms cubic-bezier(0.2,0,0.2,1)',
+        display: 'flex', flexDirection: 'column',
+      }}>
         <div style={{
-    paddingTop: 58,
-    padding: "58px 16px 14px",
-    borderBottom: "0.5px solid " + sv("--line")
-  }}>
+          padding: '58px 16px 14px', flexShrink: 0,
+          borderBottom: '0.5px solid ' + sv('--line'),
+        }}>
           <div style={{
-    fontFamily: SHELF_SANS,
-    fontSize: 10,
-    color: sv("--text3"),
-    letterSpacing: 1.5,
-    fontWeight: 700,
-    marginBottom: 4
-  }}>目录</div>
+            fontFamily: SHELF_SANS, fontSize: 10, color: sv('--text3'),
+            letterSpacing: 1.5, fontWeight: 700, marginBottom: 4,
+          }}>目录</div>
           <div style={{
-    fontFamily: SHELF_SERIF,
-    fontSize: 18,
-    fontWeight: 700,
-    color: sv("--text"),
-    lineHeight: 1.3
-  }}>{book.title}</div>
+            fontFamily: SHELF_SERIF, fontSize: 18, fontWeight: 700, color: sv('--text'),
+            lineHeight: 1.3,
+          }}>{book.title}</div>
         </div>
-        <div style={{ flex: 1, overflow: "auto" }}>
-          {book.toc.map((c, i) => <div key={i} className="row-press" onClick={() => {
-    if (c.paraIdx != null && onJumpPara) onJumpPara(c.paraIdx);
-    else onClose();
-  }} style={{
-    padding: "14px 18px",
-    cursor: "pointer",
-    borderBottom: i === book.toc.length - 1 ? "none" : "0.5px solid " + sv("--line"),
-    display: "flex",
-    alignItems: "center"
-  }}>
+        <div ref={listRef} className="reader-toc-list" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+          {toc.map((c, i) => {
+            const isCurrent = i === currentChapterIndex;
+            return <button key={i} type="button" className="row-press"
+              ref={isCurrent ? currentRef : null} aria-current={isCurrent ? 'location' : undefined}
+              onClick={() => {
+                if (c.paraIdx != null && onJumpPara) onJumpPara(c.paraIdx);
+                else onClose();
+              }} style={{
+                width: '100%', padding: '14px 18px', cursor: 'pointer',
+                border: 0, background: 'transparent', textAlign: 'left',
+                borderBottom: i === toc.length - 1 ? 'none' : '0.5px solid ' + sv('--line'),
+                display: 'flex', alignItems: 'center', WebkitTapHighlightColor: 'transparent',
+              }}>
               <span style={{
-    fontFamily: SHELF_SANS,
-    fontSize: 11,
-    color: sv("--text3"),
-    width: 28,
-    flexShrink: 0
-  }}>{String(i + 1).padStart(2, "0")}</span>
-              <span style={{ flex: 1, fontFamily: SHELF_SERIF, fontSize: 14.5, color: sv("--text") }}>{c.title}</span>
-              <span style={{ fontFamily: SHELF_SANS, fontSize: 11, color: sv("--text3") }}>p.{c.page}</span>
-            </div>)}
+                fontFamily: SHELF_SANS, fontSize: 11, color: sv('--text3'),
+                width: 28, flexShrink: 0,
+              }}>{String(i+1).padStart(2,'0')}</span>
+              <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere',
+                fontFamily: SHELF_SERIF, fontSize: 14.5, lineHeight: 1.5,
+                fontWeight: isCurrent ? 700 : 400, color: sv('--text'),
+              }}>{c.title}</span>
+              <span style={{ marginLeft: 10, flexShrink: 0, whiteSpace: 'nowrap',
+                fontFamily: SHELF_SANS, fontSize: isCurrent ? 10 : 11,
+                fontWeight: isCurrent ? 600 : 400, color: sv(isCurrent ? '--accent' : '--text3'),
+              }}>{isCurrent ? '当前章节' : `p.${c.page}`}</span>
+            </button>;
+          })}
         </div>
       </div>
-    </>;
+    </>
+  );
 }
+
 Object.assign(window, { ReaderView, ReaderEmpty, AnnotationSheet, TocDrawer, splitSentences });
 function ShelfApp() {
   const [route, setRoute] = React.useState({ view: "shelf" });
