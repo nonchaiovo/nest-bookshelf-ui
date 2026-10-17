@@ -1,3 +1,4 @@
+// Copyright (c) 2026 nonchaiovo. Personal non-commercial use only. See LICENSE.
 function todayShelf() {
   const d = /* @__PURE__ */ new Date();
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
@@ -1843,6 +1844,24 @@ function splitSentences(para) {
   const re = /[^。！？!?\.]+[。！？!?\.]*|[^。！？!?\.]+$/g;
   return para.match(re) || [para];
 }
+function readerHitsText(element, x, y) {
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  const range = document.createRange();
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!node.textContent.trim()) continue;
+    range.selectNodeContents(node);
+    for (const rect of range.getClientRects()) {
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return true;
+    }
+  }
+  return false;
+}
+
+function readerHasSelection() {
+  const selection = window.getSelection();
+  return !!(selection && !selection.isCollapsed && selection.toString().trim());
+}
+
 function ReaderParagraph({ text, paraIdx, annotations, editing, onTapAnnotation, onTapPara, fontSize = 17 }) {
   const inPara = annotations.filter((a) => a.paraIdx === paraIdx && a.rangeStart != null && a.rangeEnd != null && a.rangeStart < a.rangeEnd).sort((a, b) => a.rangeStart - b.rangeStart);
   const pieces = [];
@@ -1862,6 +1881,8 @@ function ReaderParagraph({ text, paraIdx, annotations, editing, onTapAnnotation,
       if (sel && !sel.isCollapsed && sel.toString().trim()) return;
     } catch {
     }
+    if (!readerHitsText(e.currentTarget, e.clientX, e.clientY)) return;
+    e.stopPropagation();
     if (onTapPara) onTapPara(paraIdx);
   };
   return <p
@@ -1978,7 +1999,7 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
   const [annotations, setAnnotations] = React.useState(book.annotations);
   const [selected, setSelected] = React.useState(null);
   const [editing, setEditing] = React.useState(null);
-  const [showChrome, setShowChrome] = React.useState(true);
+  const [showChrome, setShowChrome] = React.useState(false);
   const [showToc, setShowToc] = React.useState(false);
   const [showJumpPage, setShowJumpPage] = React.useState(false);
   const [selUI, setSelUI] = React.useState(null);
@@ -2167,6 +2188,29 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
     } else if (openParaIdx != null) jumpToParagraph(openParaIdx);
     jumpedRef.current = true;
   }, [layoutReady, openAnnotationId, openParaIdx, annotations]);
+  const readingTapRef = React.useRef(null);
+  const beginReadingTap = e => {
+    readingTapRef.current = {x:e.clientX, y:e.clientY, at:Date.now(),
+      moved:false, selected:readerHasSelection(), pointerId:e.pointerId};
+  };
+  const moveReadingTap = e => {
+    const tap = readingTapRef.current;
+    if (tap && (e.pointerId !== tap.pointerId || Math.hypot(e.clientX-tap.x, e.clientY-tap.y) > 8)) tap.moved = true;
+  };
+  const guardReadingClick = e => {
+    const tap = readingTapRef.current;
+    if (readerHasSelection() || (tap && (tap.selected || tap.moved || Date.now()-tap.at > 500))) {
+      e.stopPropagation();
+    }
+    readingTapRef.current = null;
+  };
+  const toggleReadingChrome = e => {
+    if (showSettings || showToc || editing || selected || showJumpPage || readerHasSelection()) return;
+    if (e.target.closest('button,a,input,textarea,[data-ann-id],[data-page-edge]')) return;
+    if (readerHitsText(e.target, e.clientX, e.clientY)) return;
+    setShowChrome(visible => !visible);
+  };
+
   const touchRef = React.useRef(null);
   const onTouchStart = (e) => {
     if (isScroll) return;
@@ -2268,7 +2312,6 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
       window.getSelection()?.removeAllRanges();
     } catch (e) {
     }
-    setShowChrome(true);
   };
   const startNewFullPara = (paraIdx) => {
     const idx = paraIdx != null ? paraIdx : selUI?.paraIdx;
@@ -2281,7 +2324,6 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
       window.getSelection()?.removeAllRanges();
     } catch (e) {
     }
-    setShowChrome(true);
   };
   const addComment = (text) => {
     if (!editing || !text.trim()) return;
@@ -2351,7 +2393,7 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
     }
     return <ReaderEmpty book={book} onClose={onClose} />;
   }
-  return <div className="reader-view" data-reading-mode={prefs.mode} style={{
+  return <div className="reader-view" data-reading-mode={prefs.mode} data-chrome-visible={showChrome} style={{
     ...readerThemeStyle(prefs.theme, hostDark),
     position: "absolute",
     inset: 0,
@@ -2361,7 +2403,7 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
     flexDirection: "column"
   }}>
       
-      <div style={{
+      <div className="reader-chrome" aria-hidden={!showChrome} inert={showChrome ? undefined : ""} style={{
     position: "absolute",
     top: 0,
     left: 0,
@@ -2372,6 +2414,7 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
     transition: "transform 250ms cubic-bezier(0.2,0,0.2,1), opacity 200ms",
     transform: showChrome ? "translateY(0)" : "translateY(-100%)",
     opacity: showChrome ? 1 : 0,
+    pointerEvents: showChrome ? "auto" : "none",
     borderBottom: "0.5px solid " + sv("--line")
   }}>
         
@@ -2423,17 +2466,22 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
     ref={pagerRef}
     className="reader-viewport"
     onScroll={onReaderScroll}
+    onPointerDownCapture={beginReadingTap}
+    onPointerMoveCapture={moveReadingTap}
+    onPointerCancel={() => { if (readingTapRef.current) readingTapRef.current.moved = true; }}
+    onClickCapture={guardReadingClick}
+    onClick={toggleReadingChrome}
     onTouchStart={onTouchStart}
     onTouchEnd={onTouchEnd}
     style={{
       position: "absolute",
-      top: 108,
+      top: "calc(12px + env(safe-area-inset-top, 0px))",
       bottom: 0,
       left: 0,
       right: 0,
       paddingLeft: 22,
       paddingRight: 22,
-      paddingBottom: "calc(20px + env(safe-area-inset-bottom, 0px))",
+      paddingBottom: "calc(8px + env(safe-area-inset-bottom, 0px))",
       overflowX: "hidden",
       overflowY: isScroll ? "auto" : "hidden",
       overscrollBehavior: "contain",
@@ -2468,7 +2516,6 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
     editing={editing}
     onTapAnnotation={(annId) => {
       setEditing(annId);
-      setShowChrome(true);
     }}
     onTapPara={(idx) => startNewFullPara(idx)}
   />)}
@@ -2484,7 +2531,7 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
         </div>
 
         
-        {!isScroll && <><div aria-label="上一页" onClick={() => turn(-1)} style={{
+        {!isScroll && <><div data-page-edge aria-label="上一页" onClick={(e) => {e.stopPropagation(); turn(-1);}} style={{
     position: "absolute",
     top: 0,
     bottom: 0,
@@ -2492,7 +2539,7 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
     width: 18,
     cursor: "pointer"
   }} />
-        <div onClick={() => turn(1)} style={{
+        <div data-page-edge aria-label="下一页" onClick={(e) => {e.stopPropagation(); turn(1);}} style={{
     position: "absolute",
     top: 0,
     bottom: 0,
@@ -2617,12 +2664,14 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
 
       
       {selUI && <button
+    onPointerDown={(e) => e.preventDefault()}
     onClick={startNewFromSelection}
+    aria-label="添加批注"
     title="节选批注"
     style={{
-      position: "fixed",
+      position: "absolute",
       right: 16,
-      bottom: "calc(80px + env(safe-area-inset-bottom, 0px))",
+      bottom: "calc(16px + env(safe-area-inset-bottom, 0px))",
       width: 52,
       height: 52,
       borderRadius: 26,

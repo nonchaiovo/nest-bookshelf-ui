@@ -1,29 +1,59 @@
+NEST UI 个人非商业使用许可证
+版本：2026-10-17
 Copyright (c) 2026 nonchaiovo. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to use
-and modify the Software for personal, non-commercial purposes only, subject
-to the following conditions:
+原作者：nonchaiovo（Chai）
+原仓库：https://github.com/nonchaiovo/nest-bookshelf-ui
 
-1. ATTRIBUTION — The above copyright notice, the name "nonchaiovo", and this
-   permission notice shall be included in all copies or substantial portions
-   of the Software.
+1. 适用范围
+本许可证适用于本仓库中由 nonchaiovo 提供并有权许可的原创源代码、
+UI 组件、样式、界面视觉素材和文档，以及基于上述内容制作的修改版本
+（以下统称“本作品”）。第三方内容除外，见第 6 条。
 
-2. NON-COMMERCIAL — The Software shall not be used, in whole or in part, for
-   any commercial purpose. Commercial use includes, but is not limited to,
-   selling the Software, incorporating it into a product or service offered
-   for sale, or using it to generate revenue.
+2. 允许的个人使用
+在遵守本许可证的前提下，允许个人免费下载、学习、在自己的设备上运行，
+以及为个人非商业用途修改本作品。此授权不包含向公众提供可运行的产品、
+在线服务、模板或安装包的权利。需要对外发布此类项目时，请先取得原作者
+明确的书面许可。
 
-3. NO REDISTRIBUTION AS OPEN SOURCE — You may not redistribute the Software,
-   or any derivative work based on it, under an open-source license or any
-   other license that would grant recipients broader rights than those stated
-   here. Private forks for personal use are permitted; public redistribution
-   is not.
+3. 禁止商业用途
+未经原作者事先书面许可，不得将本作品或其修改版本用于商业用途，
+包括但不限于：出售或付费下载、收费模板、商业产品或服务、付费订阅、
+广告变现、客户委托交付、企业业务或商业宣传。即使免费提供，若用于
+商业产品引流或其他商业目的，仍属于商业用途。署名不等于取得商用授权。
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+4. 禁止再分发与重新开源
+未经原作者事先书面许可，不得公开再分发本作品或其修改版本，包括
+源代码、编译版本、提取的 UI 组件、样式或素材；不得改名、换皮或打包后
+作为自己的项目发布，也不得改用 MIT、Apache、GPL 或其他许可证重新开源。
+改动代码、替换品牌或使用 AI 改写，不会因此免除对原作品的许可义务。
+本条不限制 GitHub 服务条款已授予用户的平台内查看及 Fork 等必要权利，
+但此类平台权限不构成商用、重新许可或在平台权限之外再分发的授权。
+推荐分享原仓库链接，而不是复制上传源文件。
+
+5. 署名与公开展示
+在第 2 条允许的个人非商业使用范围内，可以发布使用体验、截图、视频
+或修改效果介绍，但不得借展示提供源文件、安装包或在线服务。
+凡展示使用本作品的界面或修改效果，必须在相应发布正文、视频说明或
+清晰可见的画面中标注原作者、项目名和原仓库地址；不得隐藏署名、冒充
+原创或暗示原作者为你的项目背书。有修改时应明确写明“基于 NEST 书架 UI 修改”。
+所有副本或实质性部分都必须保留版权声明和完整许可证。
+
+可直接使用以下署名：
+UI 来源：NEST 书架 UI · nonchaiovo（Chai）
+原仓库：https://github.com/nonchaiovo/nest-bookshelf-ui
+（如有修改）基于 NEST 书架 UI 修改。
+
+6. 第三方内容与其他权利
+第三方库、字体及其他第三方素材遵循其各自许可证，见 THIRD_PARTY_NOTICES.md
+及相关文件声明；本许可证不会收回、增加或改变这些第三方授权。
+本许可证不授予将 NEST 名称、标识或作者身份用于产品命名、商标或背书的权利；
+第 5 条要求的事实性署名除外。法律明确允许且不可排除的权利不受影响。
+
+7. 免责与额外许可
+本作品按“现状”提供，在适用法律允许的范围内不作任何明示或默示保证，
+作者不对因使用本作品而产生的损失承担责任。违反本许可证的使用不在授权范围内。
+需要商业使用、公开部署、再分发或其他超出本许可证的用途，请通过原仓库
+联系 nonchaiovo 并事先取得明确的书面许可。
+
+本项目为源码公开项目，本许可证不是 OSI 定义的开源许可证。
