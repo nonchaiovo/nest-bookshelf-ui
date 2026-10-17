@@ -236,17 +236,18 @@ function IconPlus() {
     </svg>;
 }
 const shelfHeaderStyle = { padding: "58px 16px 8px", display: "flex", alignItems: "center", flexShrink: 0 };
-function ShelfTopBar({ title, left, right }) {
-  return <div style={{
+function ShelfTopBar({ title, left, right, sideWidth = 40 }) {
+  return <div className="shelf-topbar" style={{
     ...shelfHeaderStyle,
     position: "sticky",
     top: 0,
     zIndex: 10,
     background: sv("--bg")
   }}>
-      <div style={{ width: 40, display: "flex", justifyContent: "flex-start" }}>{left}</div>
+      <div style={{ width: sideWidth, height: 40, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "flex-start" }}>{left}</div>
       <div style={{
     flex: 1,
+    minWidth: 0,
     textAlign: "center",
     fontFamily: SHELF_SANS,
     fontSize: 16,
@@ -254,7 +255,7 @@ function ShelfTopBar({ title, left, right }) {
     color: sv("--text"),
     letterSpacing: 0.3
   }}>{title}</div>
-      <div style={{ width: 40, display: "flex", justifyContent: "flex-end" }}>{right}</div>
+      <div style={{ width: sideWidth, height: 40, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "flex-end" }}>{right}</div>
     </div>;
 }
 function BookCover({ book, w = 124, h = 178, showSpine = true }) {
@@ -495,9 +496,7 @@ function ShelfView({ onOpenBook, onResume, onUpload, isShelfActive = true }) {
       .shelf-empty { padding:34px 24px; font-size:12px; line-height:1.8; color:var(--text2); text-align:center; }
       .shelf-empty button { display:block; margin:16px auto 0; }
       .shelf-library { position:fixed; inset:0; z-index:90; background:var(--bg); display:flex; flex-direction:column; animation:shelf-library-in 180ms ease-out; }
-      .shelf-library-head { flex-shrink:0; padding:54px 22px 18px; width:100%; max-width:620px; margin:0 auto; }
-      .shelf-library-title { display:flex; align-items:center; justify-content:space-between; margin-bottom:19px; }
-      .shelf-library-title h2 { font-size:16px; font-weight:600; margin:0; }
+      .shelf-library-head { flex-shrink:0; padding:8px 22px 18px; width:100%; max-width:620px; margin:0 auto; }
       .shelf-close { display:flex; align-items:center; justify-content:center; width:40px; height:40px; padding:0; border:0; background:transparent; color:var(--text); border-radius:0; box-shadow:none; cursor:pointer; font-size:21px; font-weight:300; }
       .shelf-library-search { display:flex; align-items:center; gap:9px; padding:10px 0; background:transparent; border-radius:0; margin-bottom:16px; }
       .shelf-library-search svg { width:15px; height:15px; flex-shrink:0; opacity:.55; }
@@ -534,8 +533,8 @@ function ShelfView({ onOpenBook, onResume, onUpload, isShelfActive = true }) {
     <div className="shelf-row-heading"><span>{tab === "reading" ? "其它在读" : "已读完"}</span><button className="shelf-all" onClick={(e) => openLibrary(e)}>查看全部</button></div>
     {recent.length ? <div className="shelf-carousel" ref={trackRef} aria-label={tab === "reading" ? "其它在读书籍" : "已读完书籍"}>{recent.map((book, index) => <BookGridCard key={book.id} book={book} index={index} onOpen={() => onOpenBook(book.id)} />)}</div> : <div className="shelf-empty">{!BOOKS.length ? <>书架还是空的<button className="shelf-resume" onClick={onUpload}>导入书籍</button></> : tab === "finished" ? "暂无已读完的书" : hero ? "暂无其它在读书籍" : "暂无在读书籍"}</div>}
     {libraryOpen && ReactDOM.createPortal(<section className="shelf-library" style={{ display: isShelfActive ? void 0 : "none" }} ref={panelRef} role="dialog" aria-modal="true" aria-label="全部书籍" onKeyDown={panelKeys}>
+      <ShelfTopBar title="全部书籍" right={<button className="shelf-close" style={navBtn} aria-label="返回书架" onClick={closeLibrary}><IconClose /></button>} />
       <header className="shelf-library-head">
-        <div className="shelf-library-title"><h2>全部书籍</h2><button className="shelf-close" aria-label="返回书架" onClick={closeLibrary}><IconClose /></button></div>
         <div className="shelf-library-search"><IconSearch /><input ref={searchRef} placeholder="书名或作者" aria-label="搜索书名或作者" value={query} onChange={(e) => setQuery(e.target.value)} />{query && <button aria-label="清空搜索" onClick={() => {
     setQuery("");
     searchRef.current?.focus();
@@ -665,7 +664,7 @@ function BookDetailView({ bookId, onClose, onResume, onJumpAnnotation, onSetStat
         <div className="book-actions-anchor" onKeyDown={actionsOpen ? onActionsKeys : void 0}>
           <style>{`
             .book-actions-anchor { position:relative; width:40px; height:40px; flex-shrink:0; }
-            .book-actions-surface { position:absolute; top:4px; right:4px; width:32px; height:32px; border-radius:16px; z-index:201; background:transparent; border:1px solid transparent; overflow:hidden; transition:width 240ms cubic-bezier(.32,.72,0,1),height 240ms cubic-bezier(.32,.72,0,1),background-color 160ms,border-radius 240ms,box-shadow 160ms; }
+            .book-actions-surface { position:absolute; top:0; right:0; width:40px; height:40px; border-radius:12px; z-index:201; background:transparent; border:1px solid transparent; overflow:hidden; transition:width 240ms cubic-bezier(.32,.72,0,1),height 240ms cubic-bezier(.32,.72,0,1),background-color 160ms,border-radius 240ms,box-shadow 160ms; }
             .book-actions-surface.is-open { width:144px; height:154px; border-radius:16px; background:var(--bg); border-color:transparent; box-shadow:0 8px 28px #00000018,0 1px 4px #0000000d; }
             .book-actions-surface.is-editing { width:min(280px,calc(100vw - 32px)); height:202px; }
             .book-actions-surface.is-confirming { height:202px; }
@@ -699,7 +698,7 @@ function BookDetailView({ bookId, onClose, onResume, onJumpAnnotation, onSetStat
           `}</style>
           {actionsOpen && <div onClick={closeActions} style={{ position: "fixed", inset: 0, zIndex: 200 }} />}
           <div className={`book-actions-surface${actionsOpen ? " is-open" : ""}${renaming || confirming ? " is-editing" : ""}${confirming ? " is-confirming" : ""}`}>
-            <button ref={menuTriggerRef} className="book-actions-trigger" aria-label="更多书籍操作" aria-haspopup="menu" aria-expanded={actionsOpen} aria-controls={renaming || confirming ? menuId + "-editor" : menuId} aria-hidden={actionsOpen || void 0} tabIndex={actionsOpen ? -1 : 0} style={bookNavBtn} onClick={() => setMenuOpen(true)}>
+            <button ref={menuTriggerRef} className="book-actions-trigger" aria-label="更多书籍操作" aria-haspopup="menu" aria-expanded={actionsOpen} aria-controls={renaming || confirming ? menuId + "-editor" : menuId} aria-hidden={actionsOpen || void 0} tabIndex={actionsOpen ? -1 : 0} style={navBtn} onClick={() => setMenuOpen(true)}>
               <svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="3" r="1.4" fill="currentColor" /><circle cx="9" cy="9" r="1.4" fill="currentColor" /><circle cx="9" cy="15" r="1.4" fill="currentColor" /></svg>
             </button>
             <div id={menuId} ref={menuItemsRef} className="book-actions-items" role="menu" aria-label="书籍操作" aria-hidden={!menuOpen}>
@@ -1784,9 +1783,7 @@ function ProfileView({ onOpenBook, onOpenAnnotation, isShelfActive = true }) {
       .reader-profile-theme button { flex:1; border:0; border-radius:10px; padding:10px 8px; background:transparent; color:var(--text2); font-size:12px; cursor:pointer; }
       .reader-profile-theme button[aria-pressed=true] { background:var(--bg); color:var(--text); font-weight:600; }
       .person-reading-panel { position:fixed; inset:0; z-index:90; background:var(--bg); display:flex; flex-direction:column; }
-      .person-reading-head { width:100%; max-width:620px; margin:0 auto; padding:54px 22px 16px; }
-      .person-reading-nav { display:flex; align-items:center; gap:12px; margin-bottom:22px; }
-      .person-reading-nav h2 { flex:1; margin:0; text-align:center; font-size:15px; font-weight:600; }
+      .person-reading-head { width:100%; max-width:620px; margin:0 auto; padding:2px 22px 16px; }
       .person-reading-identity { display:flex; gap:15px; align-items:center; margin:0 2px 22px; }
       .person-reading-tabs { display:flex; background:var(--bg2); border-radius:12px; padding:3px; }
       .person-reading-tabs button { flex:1; padding:9px; border:0; border-radius:9px; background:transparent; color:var(--text2); font-size:12px; cursor:pointer; }
@@ -1819,8 +1816,8 @@ function ProfileView({ onOpenBook, onOpenAnnotation, isShelfActive = true }) {
     <div className="reader-profile-theme-label">外观</div>
     <SlidingSegments className="reader-profile-theme" aria-label="外观">{[["system", "跟随系统"], ["light", "浅色"], ["dark", "深色"]].map(([key, label]) => <button key={key} aria-pressed={theme === key} onClick={() => applyTheme(key)}>{label}</button>)}</SlidingSegments>
     {person && ReactDOM.createPortal(<section ref={panelRef} className="person-reading-panel" style={{ display: isShelfActive ? void 0 : "none" }} role="dialog" aria-modal="true" aria-label={`${identity.name}的阅读`} onKeyDown={panelKeys}>
+      <ShelfTopBar title={`${identity.name}的阅读`} left={<button aria-label="返回个人页" onClick={closePerson} style={navBtn}><IconChevronL /></button>} />
       <header className="person-reading-head">
-        <div className="person-reading-nav"><button aria-label="返回个人页" onClick={closePerson} style={bookNavBtn}><IconChevronL /></button><h2>{identity.name}的阅读</h2><div style={{ width: 32 }} /></div>
         <div className="person-reading-identity">{person === "me" ? <ReaderAvatarSlot /> : <Avatar author="non" size={58} />}<div><div className="reader-profile-name">{identity.name}</div><div className="reader-profile-meta">{rows.length} 条批注与回复 · {selectedBooks.length} 本{person === "non" ? "共读书籍" : "书籍"}</div></div></div>
         <SlidingSegments className="person-reading-tabs" aria-label="阅读记录类型">{[["notes", "批注与回复"], ["books", person === "me" ? "书籍" : "共读书籍"]].map(([key, label]) => <button key={key} aria-pressed={section === key} onClick={() => {
     returnFocusRef.current = null;
@@ -2365,25 +2362,7 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
         display: "flex",
         flexDirection: "column"
       }}>
-          <div style={{
-        paddingTop: 58,
-        padding: "58px 12px 10px",
-        display: "flex",
-        alignItems: "center",
-        gap: 4,
-        borderBottom: "0.5px solid " + sv("--line")
-      }}>
-            <button onClick={onClose} aria-label="返回" style={bookNavBtn}><IconChevronL /></button>
-            <div style={{
-        flex: 1,
-        textAlign: "center",
-        fontFamily: SHELF_SERIF,
-        fontSize: 14,
-        fontWeight: 700,
-        color: sv("--text")
-      }}>{book.title}</div>
-            <div style={{ width: 32 }} />
-          </div>
+          <ShelfTopBar title={book.title} left={<button onClick={onClose} aria-label="返回" style={navBtn}><IconChevronL /></button>} />
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ textAlign: "center", color: sv("--text3"), fontFamily: SHELF_SERIF, fontSize: 14 }}>
               正在加载……
@@ -2409,7 +2388,7 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
     left: 0,
     right: 0,
     zIndex: 12,
-    height: 96,
+    height: 106,
     background: sv("--bg"),
     transition: "transform 250ms cubic-bezier(0.2,0,0.2,1), opacity 200ms",
     transform: showChrome ? "translateY(0)" : "translateY(-100%)",
@@ -2417,48 +2396,21 @@ function ReaderView({ bookId, onClose, openAnnotationId, openParaIdx }) {
     pointerEvents: showChrome ? "auto" : "none",
     borderBottom: "0.5px solid " + sv("--line")
   }}>
-        
-        <div style={{
-    position: "absolute",
-    top: 58,
-    left: 50,
-    right: 88,
-    textAlign: "center",
-    pointerEvents: "none"
-  }}>
-          <div style={{
-    fontFamily: SHELF_SERIF,
-    fontSize: 14,
-    fontWeight: 700,
-    color: sv("--text"),
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap"
-  }}>{book.title}</div>
-          <div style={{
-    fontFamily: SHELF_SANS,
-    fontSize: 10,
-    color: sv("--text3"),
-    marginTop: 2,
-    letterSpacing: 0.5,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap"
-  }}>{currentChapterTitle ? currentChapterTitle + " · " : ""}{isScroll ? `${Math.round((page + 1) / pageCount * 100)}%` : `第 ${page + 1} / ${pageCount} 页`}</div>
-        </div>
-        
-        <div style={{ position: "absolute", top: 58, left: 12 }}>
-          <button onClick={onClose} aria-label="返回" style={bookNavBtn}><IconChevronL /></button>
-        </div>
-        
-        <div style={{ position: "absolute", top: 58, right: 12, display: "flex", gap: 2 }}>
-          <button onClick={() => setShowSettings(true)} aria-label="阅读设置" style={{ ...bookNavBtn, fontFamily: SHELF_SERIF, fontSize: 17, color: sv("--text") }}>Aa</button>
-          <button onClick={() => setShowToc(true)} aria-label="目录" style={bookNavBtn}>
-            <svg width="18" height="18" viewBox="0 0 18 18">
-              <path d="M3 4h12M3 9h12M3 14h12" stroke={sv("--text")} strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
+        <ShelfTopBar
+    sideWidth={82}
+    title={<>
+            <div style={{ fontFamily: SHELF_SERIF, fontSize: 14, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{book.title}</div>
+            <div style={{ fontFamily: SHELF_SANS, fontSize: 10, color: sv("--text3"), marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{currentChapterTitle ? currentChapterTitle + " · " : ""}{isScroll ? `${Math.round((page + 1) / pageCount * 100)}%` : `第 ${page + 1} / ${pageCount} 页`}</div>
+          </>}
+    left={<button onClick={onClose} aria-label="返回" style={navBtn}><IconChevronL /></button>}
+    right={<div style={{ display: "flex", gap: 2 }}>
+            <button onClick={() => setShowSettings(true)} aria-label="阅读设置" style={{ ...navBtn, fontFamily: SHELF_SERIF, fontSize: 17 }}>Aa</button>
+            <button onClick={() => setShowToc(true)} aria-label="目录" style={navBtn}>
+              <svg width="18" height="18" viewBox="0 0 18 18"><path d="M3 4h12M3 9h12M3 14h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+            </button>
+          </div>}
+  />
+
       </div>
 
       
@@ -2725,19 +2677,8 @@ function ReaderEmpty({ book, onClose }) {
     display: "flex",
     flexDirection: "column"
   }}>
-      <div style={{
-    paddingTop: 58,
-    paddingBottom: 10,
-    padding: "58px 12px 10px",
-    display: "flex",
-    alignItems: "center",
-    gap: 4,
-    borderBottom: "0.5px solid " + sv("--line")
-  }}>
-        <button onClick={onClose} aria-label="返回" style={bookNavBtn}><IconChevronL /></button>
-        <div style={{ flex: 1, textAlign: "center", fontFamily: SHELF_SERIF, fontSize: 14, fontWeight: 700, color: sv("--text") }}>{book.title}</div>
-        <div style={{ width: 32 }} />
-      </div>
+      <ShelfTopBar title={book.title} left={<button onClick={onClose} aria-label="返回" style={navBtn}><IconChevronL /></button>} />
+
       <div style={{
     flex: 1,
     display: "flex",
@@ -2863,9 +2804,10 @@ function AnnotationSheet({ mode, existing, selectedText, onSave, onAddComment, o
                   <div style={{ flex: 1 }}>
                     <div style={{
     display: "flex",
-    alignItems: "baseline",
+    alignItems: "center",
     gap: 6,
-    marginBottom: 4
+    marginBottom: 4,
+    lineHeight: "16px"
   }}>
                       <span style={{
     fontFamily: SHELF_SANS,
@@ -2874,8 +2816,9 @@ function AnnotationSheet({ mode, existing, selectedText, onSave, onAddComment, o
     color: sv(author.deepVar),
     letterSpacing: 0.5
   }}>{author.name}</span>
+                      <span className="annotation-kind" data-kind="note">批注</span>
                       <span style={{ fontFamily: SHELF_SANS, fontSize: 10, color: sv("--text3") }}>
-                        <span className="annotation-kind" data-kind="note">批注</span> · {relDate(existing.date)}{isMine && !editingNote ? " · 双击修改" : ""}
+                        · {relDate(existing.date)}{isMine && !editingNote ? " · 双击修改" : ""}
                       </span>
                     </div>
                     {editingNote && isMine ? <>
@@ -2963,9 +2906,12 @@ function AnnotationSheet({ mode, existing, selectedText, onSave, onAddComment, o
     }}>
                         <div style={{
       display: "flex",
-      alignItems: "baseline",
+      alignItems: "center",
       gap: 6,
       marginBottom: 4,
+      // Match the bubble's 12px padding + 1px border on either side.
+      paddingInline: 13,
+      lineHeight: "16px",
       flexDirection: isMe ? "row-reverse" : "row"
     }}>
                           <span style={{
@@ -2986,7 +2932,8 @@ function AnnotationSheet({ mode, existing, selectedText, onSave, onAddComment, o
       padding: "9px 12px",
       borderRadius: isMe ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
       background: isMe ? sv("--me-bubble") : sv("--reader-other-bubble"),
-      border: "0.5px solid " + sv("--reply-line"),
+      // A full CSS pixel keeps all four edges visible at fractional scroll positions.
+      border: "1px solid " + sv("--reply-line"),
       fontFamily: SHELF_SERIF,
       fontStyle: "normal",
       fontSize: 14,
