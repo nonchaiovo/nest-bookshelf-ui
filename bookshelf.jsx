@@ -2779,6 +2779,22 @@ function ReaderEmpty({ book, onClose }) {
       </div>
     </div>;
 }
+function HighlightColorPicker({ color, onChange }) {
+  const labels = {yellow:'黄色高亮', pink:'粉色高亮', green:'绿色高亮', blue:'蓝色高亮'};
+  return <div className="highlight-color-picker" role="group" aria-label="高亮颜色"
+    style={{display:'flex', gap:2, flexShrink:0}}>
+    {Object.values(HIGHLIGHTS).map(h => <button key={h.id} type="button"
+      aria-label={labels[h.id]} aria-pressed={color === h.id} onClick={() => onChange(h.id)}
+      style={{width:32, height:32, padding:5, border:0, borderRadius:6, background:'transparent',
+        cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center'}}>
+      <span aria-hidden="true" style={{width:22, height:22, boxSizing:'border-box', borderRadius:'50%',
+        background:h.bg, border:`1.5px solid ${color === h.id ? sv('--text') : 'transparent'}`,
+        display:'flex', alignItems:'center', justifyContent:'center'}}>
+        <span style={{width:6, height:6, borderRadius:'50%', background:h.dot}} />
+      </span>
+    </button>)}
+  </div>;
+}
 function AnnotationSheet({ mode, existing, selectedText, onSave, onAddComment, onChangeColor, onDelete, onCancel }) {
   const [color, setColor] = React.useState(existing ? existing.color : "yellow");
   const [note, setNote] = React.useState(existing ? existing.note || "" : "");
@@ -3031,8 +3047,8 @@ function AnnotationSheet({ mode, existing, selectedText, onSave, onAddComment, o
               <div style={{
     display: "flex",
     alignItems: "center",
-    gap: 14,
-    padding: "14px 0 10px",
+    gap: 10,
+    padding: "6px 0",
     borderTop: "0.5px solid " + sv("--line"),
     marginTop: 6
   }}>
@@ -3043,25 +3059,7 @@ function AnnotationSheet({ mode, existing, selectedText, onSave, onAddComment, o
     letterSpacing: 1.5,
     fontWeight: 700
   }}>高亮颜色</span>
-                <div style={{ display: "flex", gap: 8 }}>
-                  {Object.values(HIGHLIGHTS).map((h) => <button key={h.id} onClick={() => {
-    setColor(h.id);
-    onChangeColor(h.id);
-  }} style={{
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    background: h.bg,
-    border: color === h.id ? `2px solid ${sv("--text")}` : "2px solid transparent",
-    cursor: "pointer",
-    padding: 0,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center"
-  }}>
-                      <div style={{ width: 8, height: 8, borderRadius: 4, background: h.dot }} />
-                    </button>)}
-                </div>
+                <HighlightColorPicker color={color} onChange={value => { setColor(value); onChangeColor(value); }} />
                 <div style={{ flex: 1 }} />
                 <button onClick={onDelete} style={{
     background: "transparent",
@@ -3078,29 +3076,10 @@ function AnnotationSheet({ mode, existing, selectedText, onSave, onAddComment, o
 
           
           {!isView && <>
-              <div style={{
-    fontFamily: SHELF_SANS,
-    fontSize: 10,
-    color: sv("--text3"),
-    letterSpacing: 1.5,
-    fontWeight: 700,
-    marginBottom: 10
-  }}>高亮颜色</div>
-              <div style={{ display: "flex", gap: 12, marginBottom: 18 }}>
-                {Object.values(HIGHLIGHTS).map((h) => <button key={h.id} onClick={() => setColor(h.id)} style={{
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    background: h.bg,
-    border: color === h.id ? `2px solid ${sv("--text")}` : "2px solid transparent",
-    cursor: "pointer",
-    padding: 0,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center"
-  }}>
-                    <div style={{ width: 12, height: 12, borderRadius: 6, background: h.dot }} />
-                  </button>)}
+              <div style={{display:'flex', alignItems:'center', gap:10, marginBottom:12}}>
+                <span style={{fontFamily:SHELF_SANS, fontSize:10, color:sv('--text3'),
+                  letterSpacing:1.5, fontWeight:700}}>高亮颜色</span>
+                <HighlightColorPicker color={color} onChange={setColor} />
               </div>
               <div style={{
     fontFamily: SHELF_SANS,
