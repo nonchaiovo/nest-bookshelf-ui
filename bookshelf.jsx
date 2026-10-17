@@ -3419,6 +3419,14 @@ function ShelfApp() {
   const [tab, setTab] = React.useState("books");
   const mainScrollRef=React.useRef(null);
   useShelfScrollPosition(mainScrollRef);
+  React.useLayoutEffect(()=>{
+    const scroller=mainScrollRef.current;
+    if(!scroller)return;
+    // Tabs share this viewport; restore the new tab before its first paint.
+    scroller.scrollTop=0;
+    scroller.scrollLeft=0;
+    scroller.parentElement.style.setProperty('--soft-top','0');
+  },[tab]);
   const closeToHost = () => {
     setTab("books");
     backToShelf();
@@ -3439,7 +3447,7 @@ function ShelfApp() {
       <div ref={mainScrollRef} className="shelf-main-scroll" style={{
     height: "100%",
     overflow: "auto",
-    overflowX: "hidden",
+    overflowX: "hidden", scrollBehavior:"auto", overflowAnchor:"none",
     WebkitOverflowScrolling: "touch",
     overscrollBehavior: "contain"
   }}>

@@ -4151,6 +4151,13 @@ function ShelfApp() {
   const [tab, setTab] = React.useState("books");
   const mainScrollRef = React.useRef(null);
   useShelfScrollPosition(mainScrollRef);
+  React.useLayoutEffect(() => {
+    const scroller = mainScrollRef.current;
+    if (!scroller) return;
+    scroller.scrollTop = 0;
+    scroller.scrollLeft = 0;
+    scroller.parentElement.style.setProperty("--soft-top", "0");
+  }, [tab]);
   const closeToHost = () => {
     setTab("books");
     backToShelf();
@@ -4171,6 +4178,8 @@ function ShelfApp() {
     height: "100%",
     overflow: "auto",
     overflowX: "hidden",
+    scrollBehavior: "auto",
+    overflowAnchor: "none",
     WebkitOverflowScrolling: "touch",
     overscrollBehavior: "contain"
   } }, /* @__PURE__ */ React.createElement(
