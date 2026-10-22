@@ -1,5 +1,7 @@
 # NEST 书架
 
+**[在线试玩 →](https://chai-and-non.pages.dev/#works)** Chai & Non 官网上的实机演示
+
 纸感书封、自己的阅读节奏，以及留在页边的想法。
 
 **[在线体验原版 UI](https://nonchaiovo.github.io/nest-bookshelf-ui/)** · [浅色](https://nonchaiovo.github.io/nest-bookshelf-ui/?theme=light) · [深色](https://nonchaiovo.github.io/nest-bookshelf-ui/?theme=dark)
