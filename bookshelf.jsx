@@ -1085,6 +1085,22 @@ function AnnotationSearch({ book, onJumpAnnotation }) {
       savedScrollRef.current = null;
     }
   }, [q]);
+  // 搜索栏吸顶、下面卡片真的滑进来时才显示底部模糊；静止未吸顶不糊卡片
+  React.useLayoutEffect(() => {
+    const area = searchAreaRef.current;
+    const scroll = area?.closest("[data-book-detail-scroll]");
+    if (!scroll) return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const offset = scroll.getBoundingClientRect().top - area.getBoundingClientRect().top;
+      area.style.setProperty("--search-stuck", String(Math.min(1, Math.max(0, offset / 24))));
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
+    scroll.addEventListener("scroll", schedule, { passive: true });
+    update();
+    return () => { cancelAnimationFrame(frame); scroll.removeEventListener("scroll", schedule); };
+  }, []);
   const all = React.useMemo(() => {
     return [...book.annotations].sort((a, b) => {
       const dCmp = (b.date || "").localeCompare(a.date || "");
@@ -1108,7 +1124,7 @@ function AnnotationSearch({ book, onJumpAnnotation }) {
         position:'sticky',top:0,zIndex:8,background:sv('--bg'),
         padding:'8px 16px 10px',margin:'-8px -16px 4px',
       }}>
-        <ShelfSoftEdge size={28} style={{top:'100%'}}/>
+        <ShelfSoftEdge size={28} style={{top:'100%',opacity:'var(--search-stuck,0)'}}/>
         <div className="annotation-search-field" style={{
     display: "flex",
     alignItems: "center",
